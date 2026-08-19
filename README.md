@@ -1,0 +1,2 @@
+# Drsti
+Personal Vedic Companion
