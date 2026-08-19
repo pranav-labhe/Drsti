@@ -129,6 +129,10 @@ class DecisionViewModel(
         }
     }
 
+    fun deleteDecision(id: Long) = viewModelScope.launch {
+        decisionRepository.deleteDecision(id)
+    }
+
     private suspend fun buildAiContext(person: PersonEntity): AiRequestContext {
         val utilCtx = DateTimeUtil.currentContext()
         val modelCtx = CurrentTimeContext(

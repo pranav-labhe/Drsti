@@ -26,7 +26,7 @@ import com.pranav.drsti.database.entity.*
         AIRequestLogEntity::class,
         AppSettingsEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -57,7 +57,8 @@ abstract class DrishtiDatabase : RoomDatabase() {
                     context.applicationContext,
                     DrishtiDatabase::class.java,
                     "drsti.db"
-                ).build().also { instance = it }
+                ).fallbackToDestructiveMigration()
+                 .build().also { instance = it }
             }
     }
 }

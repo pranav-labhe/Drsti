@@ -72,6 +72,12 @@ interface ConversationDao {
 
     @Update
     suspend fun update(entity: ConversationEntity)
+
+    @Delete
+    suspend fun delete(entity: ConversationEntity)
+
+    @Query("DELETE FROM conversation WHERE id = :id")
+    suspend fun deleteById(id: Long)
 }
 
 @Dao
@@ -90,6 +96,9 @@ interface ConversationMessageDao {
 
     @Query("SELECT COUNT(*) FROM conversation_message WHERE conversationId = :conversationId")
     suspend fun countForConversation(conversationId: Long): Int
+
+    @Query("DELETE FROM conversation_message WHERE conversationId = :conversationId")
+    suspend fun deleteAllForConversation(conversationId: Long)
 }
 
 @Dao
@@ -177,6 +186,9 @@ interface DecisionDao {
 
     @Update
     suspend fun update(entity: DecisionEntity)
+
+    @Query("DELETE FROM decision WHERE id = :id")
+    suspend fun deleteById(id: Long)
 }
 
 @Dao
@@ -190,6 +202,9 @@ interface DecisionAnalysisDao {
 
     @Insert
     suspend fun insert(entity: DecisionAnalysisEntity): Long
+
+    @Query("DELETE FROM decision_analysis WHERE decisionId = :decisionId")
+    suspend fun deleteByDecisionId(decisionId: Long)
 }
 
 @Dao
@@ -199,6 +214,9 @@ interface DecisionOutcomeDao {
 
     @Insert
     suspend fun insert(entity: DecisionOutcomeEntity): Long
+
+    @Query("DELETE FROM decision_outcome WHERE decisionId = :decisionId")
+    suspend fun deleteByDecisionId(decisionId: Long)
 }
 
 @Dao
@@ -208,6 +226,9 @@ interface OutcomeAnalysisDao {
 
     @Insert
     suspend fun insert(entity: OutcomeAnalysisEntity): Long
+
+    @Query("DELETE FROM outcome_analysis WHERE decisionId = :decisionId")
+    suspend fun deleteByDecisionId(decisionId: Long)
 }
 
 @Dao
@@ -220,6 +241,9 @@ interface AIRequestLogDao {
 
     @Query("DELETE FROM ai_request_log")
     suspend fun clearAll()
+
+    @Query("SELECT * FROM ai_request_log WHERE conversationId = :conversationId AND success = 1 AND interactionId IS NOT NULL ORDER BY id DESC LIMIT 1")
+    suspend fun getLastInteraction(conversationId: Long): AIRequestLogEntity?
 }
 
 @Dao

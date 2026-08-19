@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
@@ -55,7 +56,7 @@ fun PersonScreen(
 
     Scaffold(
         topBar = {
-            LargeTopAppBar(
+            TopAppBar(
                 title = { Text("Birth Profiles", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
@@ -269,8 +270,8 @@ private fun ProfileCard(
                 if (person.isActive) {
                     SuggestionChip(
                         onClick = {},
-                        label = { Text("Active") },
-                        icon = { Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp)) }
+                        label = { Text("Active Profile") },
+                        icon = { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
                     )
                 }
             }

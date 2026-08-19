@@ -53,4 +53,15 @@ class ChatRepository(
         // Upsert returns the row ID; if the entity already exists, it updates and returns the same ID.
         return conversationDao.upsert(entity)
     }
+
+    suspend fun deleteConversation(id: Long) {
+        messageDao.deleteAllForConversation(id)
+        conversationDao.deleteById(id)
+    }
+
+    suspend fun updateConversationTitle(id: Long, title: String) {
+        conversationDao.getById(id)?.let {
+            conversationDao.update(it.copy(title = title, updatedAt = Instant.now().toString()))
+        }
+    }
 }

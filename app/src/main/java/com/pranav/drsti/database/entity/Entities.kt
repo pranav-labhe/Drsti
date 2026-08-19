@@ -166,6 +166,9 @@ data class OutcomeAnalysisEntity(
 @Entity(tableName = "ai_request_log")
 data class AIRequestLogEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val conversationId: Long? = null,
+    val interactionId: String? = null,
+    val previousInteractionId: String? = null,
     val requestType: String,
     val timestamp: String,
     val model: String,

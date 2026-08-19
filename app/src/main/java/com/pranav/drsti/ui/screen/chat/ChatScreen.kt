@@ -17,8 +17,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.ParagraphStyle
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.pranav.drsti.database.entity.ConversationMessageEntity
 import com.pranav.drsti.model.Conversation
 import com.pranav.drsti.ui.viewmodel.ChatViewModel
@@ -59,6 +66,9 @@ fun ChatScreen(
                     viewModel.selectConversation(id)
                     scope.launch { drawerState.close() }
                 },
+                onDeleteConversation = { id ->
+                    viewModel.deleteConversation(id)
+                },
                 onNewConversation = {
                     viewModel.createConversation()
                     scope.launch { drawerState.close() }
@@ -68,10 +78,10 @@ fun ChatScreen(
                 onNavigateToKundali = onNavigateToKundali,
                 onNavigateToPanchang = onNavigateToPanchang
             )
-        }
+        },
+        modifier = modifier
     ) {
         Scaffold(
-            modifier = Modifier.imePadding(),
             topBar = {
                 TopAppBar(
                     title = { Text("D\u1e5b\u1e63\u1e6di", style = MaterialTheme.typography.titleLarge) },
@@ -95,7 +105,11 @@ fun ChatScreen(
                 )
             }
         ) { padding ->
-            Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
                 error?.let {
                     Surface(
                         color = MaterialTheme.colorScheme.errorContainer,
@@ -158,7 +172,8 @@ fun ChatScreen(
                             input = ""
                         }
                     },
-                    enabled = !state.isSending
+                    enabled = !state.isSending,
+                    modifier = Modifier.imePadding()
                 )
             }
         }
@@ -237,11 +252,43 @@ private fun ChatBubble(message: ConversationMessageEntity) {
             modifier = Modifier.widthIn(max = 320.dp),
             tonalElevation = if (isUser) 0.dp else 2.dp
         ) {
+            val content = message.content
+            val annotatedString = remember(content) {
+                buildAnnotatedString {
+                    var lastIndex = 0
+                    // Match bold, italics, and list bullets
+                    val regex = Regex("(\\*\\*.*?\\*\\*)|(\\*.*?\\*)|(^\\s*[-•]\\s+.*$)", RegexOption.MULTILINE)
+                    regex.findAll(content).forEach { match ->
+                        append(content.substring(lastIndex, match.range.first))
+                        val text = match.value
+                        when {
+                            text.startsWith("**") && text.endsWith("**") -> {
+                                withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
+                                    append(text.substring(2, text.length - 2))
+                                }
+                            }
+                            text.startsWith("*") && text.endsWith("*") -> {
+                                withStyle(style = SpanStyle(fontStyle = FontStyle.Italic)) {
+                                    append(text.substring(1, text.length - 1))
+                                }
+                            }
+                            text.trim().startsWith("-") || text.trim().startsWith("•") -> {
+                                append("  • ")
+                                append(text.trim().substring(1).trim())
+                            }
+                            else -> append(text)
+                        }
+                        lastIndex = match.range.last + 1
+                    }
+                    append(content.substring(lastIndex))
+                }
+            }
             Text(
-                message.content,
+                text = annotatedString,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodyMedium,
+                lineHeight = 20.sp
             )
         }
     }
@@ -265,11 +312,12 @@ private fun TypingIndicator() {
 }
 
 @Composable
-private fun ChatInputBar(value: String, onValueChange: (String) -> Unit, onSend: () -> Unit, enabled: Boolean) {
+private fun ChatInputBar(value: String, onValueChange: (String) -> Unit, onSend: () -> Unit, enabled: Boolean, modifier: Modifier = Modifier) {
     Surface(
         tonalElevation = 8.dp,
         shadowElevation = 8.dp,
-        color = MaterialTheme.colorScheme.surface
+        color = MaterialTheme.colorScheme.surface,
+        modifier = modifier
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -309,6 +357,7 @@ private fun ChatDrawerContent(
     conversations: List<Conversation>,
     currentConversationId: String?,
     onConversationSelected: (String) -> Unit,
+    onDeleteConversation: (String) -> Unit,
     onNewConversation: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToProfile: () -> Unit,
@@ -336,12 +385,31 @@ private fun ChatDrawerContent(
             Text("Recent History", style = MaterialTheme.typography.labelLarge)
             Spacer(Modifier.height(8.dp))
             
-            conversations.take(10).forEach { conv ->
-                NavigationDrawerItem(
-                    label = { Text(conv.title ?: "Untitled Chat", maxLines = 1) },
-                    selected = conv.id == currentConversationId,
-                    onClick = { onConversationSelected(conv.id) }
-                )
+            conversations.take(20).forEach { conv ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    NavigationDrawerItem(
+                        label = { Text(conv.title ?: "Untitled Chat", maxLines = 1) },
+                        selected = conv.id == currentConversationId,
+                        onClick = { onConversationSelected(conv.id) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = { onDeleteConversation(conv.id) },
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
             }
             
             Spacer(Modifier.weight(1f))

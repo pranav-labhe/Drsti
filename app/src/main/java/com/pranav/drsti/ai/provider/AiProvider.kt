@@ -6,6 +6,7 @@ import com.pranav.drsti.model.*
 import com.pranav.drsti.util.HashUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -50,7 +51,7 @@ interface AiAstrologyService {
     suspend fun analyzeTransits(context: AiRequestContext): TransitAnalysisResult
     suspend fun analyzeDecision(context: AiRequestContext, request: DecisionRequest): DecisionAnalysis
     suspend fun analyzeOutcome(originalAnalysis: DecisionAnalysis, outcome: OutcomeInput): OutcomeAnalysis
-    suspend fun chat(context: AiRequestContext, userMessage: String): ChatReply
+    suspend fun chat(context: AiRequestContext, userMessage: String, conversationId: Long? = null): ChatReply
 }
 
 private const val CALC_VERSION = "astrocalc-1.0"
@@ -433,7 +434,7 @@ class MockAiProvider : AiAstrologyService {
             confidence = if (context.kundali != null && context.dasha != null) "medium" else "low",
             caveats = listOfNotNull(
                 if (context.kundali == null) "No natal chart on file — add your birth details for a fuller analysis." else null,
-                "These are astrological indicators, not guarantees. The final decision is yours."
+                "These are astrological indicators, not guarantees. The final decision is theirs."
             ),
             provenance = Provenance(
                 calculationVersion = CALC_VERSION, promptVersion = "decision-v1", model = "mock",
@@ -471,28 +472,42 @@ class MockAiProvider : AiAstrologyService {
         )
     }
 
-    override suspend fun chat(context: AiRequestContext, userMessage: String): ChatReply = withContext(Dispatchers.Default) {
+    override suspend fun chat(context: AiRequestContext, userMessage: String, conversationId: Long?): ChatReply = withContext(Dispatchers.Default) {
         val intent = IntentRecognizer.recognize(userMessage)
-        val panchangInfo = context.panchang?.let {
-            "Today is ${it.tithiName} tithi, ${it.nakshatra.displayName} nakshatra."
-        } ?: ""
         
+        val panchangInfo = context.panchang?.let {
+            "Today is ${it.tithiName} tithi (${it.paksha}) under ${it.nakshatra.displayName} nakshatra."
+        } ?: "Panchang details are not yet generated for today."
+
+        val kundaliInfo = context.kundali?.let {
+            "Your Lagna (Ascendant) is ${it.ascendant.sign.displayName}."
+        } ?: "Birth chart details are not on file."
+
+        val dashaInfo = context.dasha?.currentMahadasha?.let {
+            "You are running ${it.planet.displayName()} Mahadasha."
+        } ?: "Dasha timing information is missing."
+
         val text = when (intent) {
             ChatIntent.PANCHANG_QUERY -> context.panchang?.let {
-                "Today (${it.dateIso}) is ${it.vara}, ${it.tithiName} (${it.paksha}), ${it.nakshatra.displayName} nakshatra, ${it.yogaName} yoga." +
-                        (it.rahuKalam?.let { rk -> " Rahu Kalam is around $rk — best avoided for new beginnings." } ?: "")
-            } ?: "I don't have today's Panchang loaded yet — open the Panchang tab to generate it."
+                "Today (${it.dateIso}) is ${it.vara}, ${it.tithiName} (${it.paksha}), ${it.nakshatra.displayName} nakshatra. " +
+                        (it.rahuKalam?.let { rk -> "Rahu Kalam is around $rk." } ?: "")
+            } ?: "Open the Panchang tab to load today's cosmic timing."
+            
             ChatIntent.KUNDALI_QUERY -> context.kundali?.let {
                 "Your Ascendant is ${it.ascendant.sign.displayName}. Moon is in ${it.planets.firstOrNull { p -> p.planet == PlanetName.MOON }?.sign?.displayName ?: "—"}."
-            } ?: "I don't see a saved birth chart yet. Add your birth details in Profile to unlock this."
+            } ?: "Add your birth details in Profile to unlock your chart analysis."
+            
             ChatIntent.DASHA_QUERY -> context.dasha?.currentMahadasha?.let {
-                "You're currently running ${it.planet.displayName()} Mahadasha (until ${it.endDateIso})." +
-                        (context.dasha.currentAntardasha?.let { a -> " Within that, ${a.planet.displayName()} Antardasha is active until ${a.endDateIso}." } ?: "")
-            } ?: "I don't have Dasha calculated yet — add your birth details first."
+                "You're in ${it.planet.displayName()} Mahadasha until ${it.endDateIso}." +
+                        (context.dasha.currentAntardasha?.let { a -> " Within that, ${a.planet.displayName()} Antardasha is active." } ?: "")
+            } ?: "Add birth details to calculate your Vimshottari Dasha periods."
+            
             ChatIntent.DECISION_ANALYSIS, ChatIntent.TIMING_COMPARISON ->
-                "That sounds like a real decision worth comparing properly. $panchangInfo Tap the \"New Decision\" icon (+) in the top bar so I can lay out each option side by side with astrological support."
-            else -> "I'm here to help you think through this using your chart and today's Panchang ($panchangInfo). Tell me more about what you're weighing, or ask about your Panchang, Kundali, or Dasha directly."
+                "That sounds like a decision. $panchangInfo Tap the (+) icon in the top bar to compare your choices with full astrological support."
+            
+            else -> "I see you're asking about your day. $panchangInfo $kundaliInfo $dashaInfo Based on this, it's a good time for reflection. For a deeper analysis of a specific choice, try the 'New Decision' icon in the top bar."
         }
+
         ChatReply(
             text = text, intent = intent.name,
             provenance = Provenance(
@@ -574,25 +589,104 @@ class OpenAiProvider(
             .getOrElse { mockFallback.analyzeOutcome(originalAnalysis, outcome) }
     }
 
-    override suspend fun chat(context: AiRequestContext, userMessage: String): ChatReply {
-        val text = runCatching { callForInterpretation("chat-v1", userMessage) }.getOrNull()
-            ?: return mockFallback.chat(context, userMessage)
-        return ChatReply(
-            text = text, intent = IntentRecognizer.recognize(userMessage).name,
-            provenance = Provenance(
-                calculationVersion = CALC_VERSION, promptVersion = "chat-v1", model = model,
-                generatedAt = java.time.Instant.now().toString(), source = "OpenAiProvider",
-                sourceVersion = "openai-chat-completions-v1",
-                inputHash = HashUtil.sha256(userMessage), outputHash = HashUtil.sha256(text)
+    override suspend fun chat(context: AiRequestContext, userMessage: String, conversationId: Long?): ChatReply {
+        val promptVersion = "chat-v1"
+        val startTime = System.currentTimeMillis()
+        var success = false
+        var errorMsg: String? = null
+        var output: String? = null
+
+        val structuredContext = buildString {
+            append("AVAILABLE JYOTISH DATA\n\n")
+            
+            context.panchang?.let {
+                append("[PANCHANG]\n")
+                append(json.encodeToString(it))
+                append("\n\n")
+            }
+            
+            context.kundali?.let {
+                append("[KOSHTAKA / NATAL CHART]\n")
+                append(json.encodeToString(it))
+                append("\n\n")
+            }
+            
+            context.dasha?.let {
+                append("[DASHA]\n")
+                append(json.encodeToString(it))
+                append("\n\n")
+            }
+            
+            context.planetaryPositions?.let {
+                append("[CURRENT PLANETARY POSITIONS]\n")
+                append(json.encodeToString(it))
+                append("\n\n")
+            }
+
+            if (context.recentMessages.isNotEmpty()) {
+                append("RECENT CONVERSATION HISTORY\n")
+                context.recentMessages.forEach { append(it).append("\n") }
+                append("\n")
+            }
+
+            append("USER MESSAGE\n")
+            append(userMessage)
+        }
+
+        try {
+            output = callForInterpretation(promptVersion, structuredContext)
+            success = true
+
+            // Try to extract a structured decision analysis if the AI included one
+            val decisionAnalysis = if (output.contains("DECISION_ANALYSIS_START")) {
+                runCatching {
+                    val jsonStr = output.substringAfter("DECISION_ANALYSIS_START").substringBefore("DECISION_ANALYSIS_END").trim()
+                    json.decodeFromString(DecisionAnalysis.serializer(), jsonStr)
+                }.getOrNull()
+            } else null
+
+            val cleanedText = if (decisionAnalysis != null) {
+                output.substringBefore("DECISION_ANALYSIS_START").trim() + "\n\n" + output.substringAfter("DECISION_ANALYSIS_END").trim()
+            } else output
+
+            return ChatReply(
+                text = cleanedText.trim(), 
+                intent = if (decisionAnalysis != null) "DECISION_ANALYSIS" else "AI_INTERPRETED",
+                provenance = Provenance(
+                    calculationVersion = CALC_VERSION, promptVersion = promptVersion, model = model,
+                    generatedAt = java.time.Instant.now().toString(), source = "OpenAiProvider",
+                    sourceVersion = "openai-chat-completions-v1",
+                    inputHash = HashUtil.sha256(structuredContext), outputHash = HashUtil.sha256(output)
+                ),
+                decisionAnalysis = decisionAnalysis
             )
-        )
+        } catch (e: Exception) {
+            errorMsg = e.message ?: "Unknown error"
+            throw e
+        } finally {
+            logDao?.let { dao ->
+                val log = AIRequestLogEntity(
+                    conversationId = conversationId,
+                    requestType = promptVersion,
+                    timestamp = Instant.now().toString(),
+                    model = model,
+                    promptVersion = promptVersion,
+                    inputHash = HashUtil.sha256(structuredContext),
+                    outputHash = output?.let { HashUtil.sha256(it) },
+                    success = success,
+                    error = errorMsg,
+                    latencyMs = System.currentTimeMillis() - startTime
+                )
+                kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) { dao.insert(log) }
+            }
+        }
     }
 
     /**
      * Minimal chat-completions call. Kept intentionally simple/isolated inside this class
      * (spec §8: "keep API-specific implementation isolated inside the provider layer").
      */
-    private fun callForInterpretation(promptVersion: String, userContent: String): String {
+    private suspend fun callForInterpretation(promptVersion: String, userContent: String): String = withContext(Dispatchers.IO) {
         val startTime = System.currentTimeMillis()
         var success = false
         var errorMsg: String? = null
@@ -624,7 +718,7 @@ class OpenAiProvider(
                 val parsed = json.decodeFromString(OpenAiChatResponse.serializer(), raw)
                 output = parsed.choices.firstOrNull()?.message?.content ?: error("No content in response")
                 success = true
-                return output!!
+                return@withContext output!!
             }
         } catch (e: Exception) {
             errorMsg = e.message ?: "Unknown error"
@@ -642,10 +736,7 @@ class OpenAiProvider(
                     error = errorMsg,
                     latencyMs = System.currentTimeMillis() - startTime
                 )
-                // Use a standard non-blocking insert if possible, but here we are in a suspendable context
-                // already via the AiAstrologyService calls. However, callForInterpretation is private and
-                // called from suspend functions.
-                kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) { dao.insert(log) }
+                dao.insert(log)
             }
         }
     }
@@ -653,11 +744,36 @@ class OpenAiProvider(
 
 object SystemPrompts {
     fun forVersion(promptVersion: String): String = when (promptVersion) {
-        "decision-v1" -> "You are Dṛṣṭi's Vedic decision-analysis capability. You receive real, pre-computed astronomical/Jyotish data (never invent positions). Compare the given options using Dasha, transits, and Panchang. Never tell the user what to do — only present astrological support (0-100 indicators, not probabilities), supporting and contradicting factors, and clearly state the final decision is theirs."
-        "outcome-v1" -> "You are Dṛṣṭi's retrospective Outcome capability. Compare the original immutable analysis against what actually happened. Never rewrite the original analysis. Identify which indicators aligned or didn't, and note calibration learnings."
-        "transit-v1" -> "You are Dṛṣṭi's Transit capability. Analyze the supplied natal chart and current planetary positions. Do not fabricate positions; only interpret what's supplied."
-        "chat-v1" -> "You are Dṛṣṭi, a private Vedic decision companion. Be concise, warm, and clear that astrology offers a lens, not certainty. Never decide for the user."
-        else -> "You are Dṛṣṭi, a private Vedic Jyotish assistant. Use only the supplied data; never invent astronomical positions."
+        "decision-v1" -> "You are D\u1e5b\u1e63\u1e6di's Vedic decision-analysis capability. You receive real, pre-computed astronomical/Jyotish data (never invent positions). Compare the given options using Dasha, transits, and Panchang. Never tell the user what to do \u2014 only present astrological support (0-100 indicators, not probabilities), supporting and contradicting factors, and clearly state the final decision is theirs."
+        "outcome-v1" -> "You are D\u1e5b\u1e63\u1e6di's retrospective Outcome capability. Compare the original immutable analysis against what actually happened. Never rewrite the original analysis. Identify which indicators aligned or didn't, and note calibration learnings."
+        "transit-v1" -> "You are D\u1e5b\u1e63\u1e6di's Transit capability. Analyze the supplied natal chart and current planetary positions. Do not fabricate positions; only interpret what's supplied."
+        "chat-v1" -> """
+            You are D\u1e5b\u1e63\u1e6di, an intelligent Vedic Jyotish reasoning companion.
+            The user speaks normally. D\u1e5b\u1e63\u1e6di understands the Jyotish implications behind the question.
+            Analyze the user's question using the supplied Jyotish data.
+            Determine yourself which parts of the supplied data are relevant to the question. Do not assume every vector is relevant.
+            Do not invent missing astronomical, Kundali, Dasha, Panchang, or transit data.
+            
+            IMPORTANT FOR END USER:
+            - Respond directly to the user in a natural, friendly, human-understandable manner.
+            - Avoid technical Jyotish jargon (like Graha names, house numbers, or specific yoga names) in your final natural language response unless explicitly asked.
+            - Focus on the practical implications for the user's life (career, relationships, timing).
+            - For every insight or prediction, provide an estimated "Astrological Support" percentage (0-100%) based on the strength of the indicators you found in the data.
+            - Astrology is an interpretive lens, not certainty. Do not present indicators as scientifically validated probabilities or guarantees.
+            
+            Determine yourself which factors are relevant. Do not merely repeat the Panchang when the user is asking for a personalized interpretation.
+            Synthesize the relevant natal chart, Dasha, transits, and Panchang vectors.
+
+            If the user is asking you to compare choices or make a decision in chat, identify the choices from the user's message and provide a structured comparison suitable for D\u1e5b\u1e63\u1e6di's existing DecisionAnalysis flow. 
+            
+            Your response MUST follow this format if a decision is detected:
+            1. A natural language introduction.
+            2. The tag "DECISION_ANALYSIS_START" on its own line.
+            3. A JSON object representing the DecisionAnalysis model (containing summary, options with id and explanation, preferredOptionId, confidence, and caveats).
+            4. The tag "DECISION_ANALYSIS_END" on its own line.
+            5. A natural language conclusion.
+        """.trimIndent()
+        else -> "You are D\u1e5b\u1e63\u1e6di, a private Vedic Jyotish assistant. Use only the supplied data; never invent astronomical positions."
     }
 }
 
@@ -730,21 +846,151 @@ class GeminiAiProvider(
             .getOrElse { mockFallback.analyzeOutcome(originalAnalysis, outcome) }
     }
 
-    override suspend fun chat(context: AiRequestContext, userMessage: String): ChatReply {
-        val text = runCatching { callForInterpretation("chat-v1", userMessage) }.getOrNull()
-            ?: return mockFallback.chat(context, userMessage)
-        return ChatReply(
-            text = text, intent = IntentRecognizer.recognize(userMessage).name,
-            provenance = Provenance(
-                calculationVersion = CALC_VERSION, promptVersion = "chat-v1", model = model,
-                generatedAt = java.time.Instant.now().toString(), source = "GeminiAiProvider",
-                sourceVersion = "gemini-generate-content-v1",
-                inputHash = HashUtil.sha256(userMessage), outputHash = HashUtil.sha256(text)
+    override suspend fun chat(context: AiRequestContext, userMessage: String, conversationId: Long?): ChatReply {
+        val promptVersion = "chat-v1"
+        val startTime = System.currentTimeMillis()
+        var success = false
+        var errorMsg: String? = null
+        var output: String? = null
+        var responseId: String? = null
+        var previousId: String? = null
+
+        val structuredContext = buildString {
+            append("AVAILABLE JYOTISH DATA\n\n")
+            
+            context.panchang?.let {
+                append("[PANCHANG]\n")
+                append(json.encodeToString(it))
+                append("\n\n")
+            }
+            
+            context.kundali?.let {
+                append("[KOSHTAKA / NATAL CHART]\n")
+                append(json.encodeToString(it))
+                append("\n\n")
+            }
+            
+            context.dasha?.let {
+                append("[DASHA]\n")
+                append(json.encodeToString(it))
+                append("\n\n")
+            }
+            
+            context.planetaryPositions?.let {
+                append("[CURRENT PLANETARY POSITIONS]\n")
+                append(json.encodeToString(it))
+                append("\n\n")
+            }
+
+            // For Gemini interactions, we don't manually append history here.
+            // It's handled by the previous_interaction_id.
+
+            append("USER MESSAGE\n")
+            append(userMessage)
+        }
+
+        try {
+            // Find previous interaction ID from logs
+            if (conversationId != null && logDao != null) {
+                previousId = logDao.getLastInteraction(conversationId)?.interactionId
+            }
+
+            val systemPrompt = SystemPrompts.forVersion(promptVersion)
+            val combinedInput = "$systemPrompt\n\n$structuredContext"
+            
+            val bodyJson = json.encodeToString(
+                GeminiInteractionRequest(
+                    model = "models/$model",
+                    input = combinedInput,
+                    previous_interaction_id = previousId
+                )
             )
-        )
+            
+            val url = "https://generativelanguage.googleapis.com/v1beta/interactions"
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("x-goog-api-key", apiKey)
+                .addHeader("Content-Type", "application/json")
+                .post(bodyJson.toRequestBody("application/json".toMediaType()))
+                .build()
+                
+            val responseText = withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()
+                        errorMsg = "Gemini interaction failed: ${response.code} ${response.message}\n$errorBody"
+                        error(errorMsg!!)
+                    }
+                    val raw = response.body?.string() ?: error("Empty response body")
+                    try {
+                        val parsed = json.decodeFromString(GeminiInteractionResponse.serializer(), raw)
+                        responseId = parsed.id
+                        // Extract text from steps -> content (native interactions format)
+                        val stepOutput = parsed.steps
+                            .find { it.type == "model_output" }
+                            ?.content
+                            ?.find { it.type == "text" }
+                            ?.text
+                        
+                        output = stepOutput ?: parsed.output
+                        output ?: error("No text content found in Gemini response. Checked 'steps' and 'output'. Raw: $raw")
+                    } catch (e: Exception) {
+                        error("Failed to parse Gemini interaction response: ${e.message}. Raw body: $raw")
+                    }
+                }
+            }
+
+            output = responseText
+            success = true
+            
+            // Try to extract a structured decision analysis
+            val decisionAnalysis = if (output.contains("DECISION_ANALYSIS_START")) {
+                runCatching {
+                    val jsonStr = output.substringAfter("DECISION_ANALYSIS_START").substringBefore("DECISION_ANALYSIS_END").trim()
+                    json.decodeFromString(DecisionAnalysis.serializer(), jsonStr)
+                }.getOrNull()
+            } else null
+
+            val cleanedText = if (decisionAnalysis != null) {
+                output.substringBefore("DECISION_ANALYSIS_START").trim() + "\n\n" + output.substringAfter("DECISION_ANALYSIS_END").trim()
+            } else output
+
+            return ChatReply(
+                text = cleanedText.trim(), 
+                intent = if (decisionAnalysis != null) "DECISION_ANALYSIS" else "AI_INTERPRETED",
+                provenance = Provenance(
+                    calculationVersion = CALC_VERSION, promptVersion = promptVersion, model = model,
+                    generatedAt = java.time.Instant.now().toString(), source = "GeminiAiProvider",
+                    sourceVersion = "gemini-interactions-v1",
+                    inputHash = HashUtil.sha256(structuredContext), outputHash = HashUtil.sha256(output)
+                ),
+                decisionAnalysis = decisionAnalysis
+            )
+        } catch (e: Exception) {
+            errorMsg = e.message ?: "Unknown error"
+            throw e
+        } finally {
+            logDao?.let { dao ->
+                val log = AIRequestLogEntity(
+                    conversationId = conversationId,
+                    interactionId = responseId,
+                    previousInteractionId = previousId,
+                    requestType = promptVersion,
+                    timestamp = Instant.now().toString(),
+                    model = model,
+                    promptVersion = promptVersion,
+                    inputHash = HashUtil.sha256(structuredContext),
+                    outputHash = output?.let { HashUtil.sha256(it) },
+                    success = success,
+                    error = errorMsg,
+                    latencyMs = System.currentTimeMillis() - startTime
+                )
+                kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) { dao.insert(log) }
+            }
+        }
     }
 
-    private fun callForInterpretation(promptVersion: String, userContent: String): String {
+    private suspend fun callForInterpretation(promptVersion: String, userContent: String): String = withContext(Dispatchers.IO) {
         val startTime = System.currentTimeMillis()
         var success = false
         var errorMsg: String? = null
@@ -755,6 +1001,7 @@ class GeminiAiProvider(
             val systemPrompt = SystemPrompts.forVersion(promptVersion)
             val combinedPrompt = "$systemPrompt\n\nUser input: $userContent"
             
+            // For non-chat calls, we use the standard generateContent flow
             val bodyJson = json.encodeToString(
                 GeminiChatRequest(
                     contents = listOf(
@@ -781,7 +1028,7 @@ class GeminiAiProvider(
                 val parsed = json.decodeFromString(GeminiChatResponse.serializer(), raw)
                 output = parsed.candidates.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: error("No content in response")
                 success = true
-                return output!!
+                return@withContext output!!
             }
         } catch (e: Exception) {
             errorMsg = e.message ?: "Unknown error"
@@ -799,11 +1046,37 @@ class GeminiAiProvider(
                     error = errorMsg,
                     latencyMs = System.currentTimeMillis() - startTime
                 )
-                kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) { dao.insert(log) }
+                dao.insert(log)
             }
         }
     }
 }
+
+@kotlinx.serialization.Serializable
+private data class GeminiInteractionRequest(
+    val model: String,
+    val input: String,
+    val previous_interaction_id: String? = null
+)
+
+@kotlinx.serialization.Serializable
+private data class GeminiInteractionResponse(
+    val id: String,
+    val output: String? = null,
+    val steps: List<GeminiStep> = emptyList()
+)
+
+@kotlinx.serialization.Serializable
+private data class GeminiStep(
+    val type: String,
+    val content: List<GeminiContentPart> = emptyList()
+)
+
+@kotlinx.serialization.Serializable
+private data class GeminiContentPart(
+    val type: String,
+    val text: String? = null
+)
 
 @kotlinx.serialization.Serializable
 private data class GeminiPart(val text: String)

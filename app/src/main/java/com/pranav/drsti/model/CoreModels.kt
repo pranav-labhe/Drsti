@@ -335,7 +335,8 @@ enum class ChatIntent {
 data class ChatReply(
     val text: String,
     val intent: String,
-    val provenance: Provenance
+    val provenance: Provenance,
+    val decisionAnalysis: DecisionAnalysis? = null
 )
 
 // ---------- Context passed to AI capabilities (ContextBuilder output, spec §6) ----------
