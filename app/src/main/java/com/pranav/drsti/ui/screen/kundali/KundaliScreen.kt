@@ -15,6 +15,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -41,7 +42,7 @@ fun KundaliScreen(
 
     Scaffold(
         topBar = {
-            LargeTopAppBar(
+            TopAppBar( // Changed from LargeTopAppBar to TopAppBar to reduce top space
                 title = { Text("Birth Chart", fontWeight = FontWeight.Bold) },
                 actions = {
                     IconButton(onClick = { if (selectedTab == 0) viewModel.recompute() else transitViewModel.refresh(true) }) { 
@@ -89,64 +90,126 @@ private fun EmptyState(text: String) {
 
 @Composable
 private fun KundaliContent(kundali: KundaliData, dashaSummary: String?) {
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text(
-            "Ascendant: ${kundali.ascendant.sign.displayName} \u2022 ${kundali.ascendant.nakshatra.displayName} pada ${kundali.ascendant.pada}",
-            style = MaterialTheme.typography.titleMedium
-        )
-        dashaSummary?.let {
-            Spacer(Modifier.height(4.dp))
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Text(
+                "Lagna Kundali (Birth Chart)",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                "Ascendant: ${kundali.ascendant.sign.displayName} \u2022 ${kundali.ascendant.nakshatra.displayName} pada ${kundali.ascendant.pada}",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            dashaSummary?.let {
+                Spacer(Modifier.height(4.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall)
+            }
         }
-        Spacer(Modifier.height(16.dp))
 
-        NorthIndianChart(kundali, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
-
-        Spacer(Modifier.height(16.dp))
-        Text("Planetary Positions", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
-
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            items(kundali.planets, key = { it.planet }) { planet -> PlanetRow(planet) }
+        item {
+            NorthIndianChart(
+                planets = kundali.planets,
+                startingSignIndex = kundali.ascendant.sign.index,
+                modifier = Modifier.fillMaxWidth().aspectRatio(1f)
+            )
         }
 
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "System: ${kundali.zodiac} \u2022 ${kundali.ayanamsha} Ayanamsha \u2022 ${kundali.houseSystem} houses. " +
-                    "Positions computed locally (${kundali.provenance.source}), generated ${kundali.provenance.generatedAt.take(19)}.",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        val moonPlanet = kundali.planets.find { it.planet == com.pranav.drsti.model.PlanetName.MOON }
+        if (moonPlanet != null) {
+            item {
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "Chandra Kundali (Moon Chart)",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Text(
+                    "Moon Rashi: ${moonPlanet.sign.displayName} \u2022 ${moonPlanet.nakshatra.displayName}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+            item {
+                NorthIndianChart(
+                    planets = kundali.planets,
+                    startingSignIndex = moonPlanet.sign.index,
+                    modifier = Modifier.fillMaxWidth().aspectRatio(1f)
+                )
+            }
+        }
+
+        item {
+            Spacer(Modifier.height(16.dp))
+            Text("Planetary Details", style = MaterialTheme.typography.titleMedium)
+        }
+
+        items(kundali.planets, key = { it.planet }) { planet -> 
+            PlanetRow(planet) 
+        }
+
+        item {
+            Text(
+                "System: ${kundali.zodiac} \u2022 ${kundali.ayanamsha} Ayanamsha \u2022 ${kundali.houseSystem} houses. " +
+                        "Positions computed locally (${kundali.provenance.source}), generated ${kundali.provenance.generatedAt.take(19)}.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
 @Composable
 private fun PlanetRow(planet: KundaliPlanet) {
-    Surface(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(planet.planet.displayName(), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            Text(
-                "${planet.sign.displayName} ${"%.1f".format(planet.degreeInSign)}\u00B0" + if (planet.retrograde) " (R)" else "",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Spacer(Modifier.width(8.dp))
-            Text("House ${planet.house}", style = MaterialTheme.typography.bodySmall)
+            Column(Modifier.weight(1f)) {
+                Text(planet.planet.displayName(), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                Text(
+                    "${planet.sign.displayName} ${"%.1f".format(planet.degreeInSign)}\u00B0" + if (planet.retrograde) " (R)" else "",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = ShapeDefaults.Small
+            ) {
+                Text(
+                    "H${planet.house}", 
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
         }
     }
 }
 
 /**
  * A simple, honest North-Indian diamond chart: the 12 fixed diamond/triangle
- * cells (house 1 always top-center diamond) each list the sign number and
- * any planets whose *house* placement (relative to the Ascendant) falls there.
+ * cells (house 1 always top-center diamond).
  */
 @Composable
-private fun NorthIndianChart(kundali: KundaliData, modifier: Modifier = Modifier) {
-    val planetsByHouse = kundali.planets.groupBy { it.house }
-    val ascendantSignIndex = kundali.ascendant.sign.index
+private fun NorthIndianChart(
+    planets: List<KundaliPlanet>,
+    startingSignIndex: Int,
+    modifier: Modifier = Modifier
+) {
+    // Recalculate houses relative to the starting sign (Lagna or Moon)
+    val planetsByViewHouse = planets.groupBy { p ->
+        ((p.sign.index - startingSignIndex + 12) % 12) + 1
+    }
+    val onSurfaceColor = MaterialTheme.colorScheme.onSurface.toArgb()
+    val primaryColor = MaterialTheme.colorScheme.primary.toArgb()
 
     Canvas(modifier = modifier) {
         val w = size.width
@@ -184,24 +247,35 @@ private fun NorthIndianChart(kundali: KundaliData, modifier: Modifier = Modifier
 
         anchors.forEachIndexed { idx, anchor ->
             val houseNumber = idx + 1
-            val signIndex = (ascendantSignIndex + idx) % 12
-            val planetsHere = planetsByHouse[houseNumber].orEmpty()
-            val label = buildString {
-                append(signIndex + 1)
-                if (planetsHere.isNotEmpty()) {
-                    append("\n")
-                    append(planetsHere.joinToString(" ") { p -> abbreviate(p.planet.name) })
+            val signNumber = (startingSignIndex + idx) % 12 + 1
+            val planetsHere = planetsByViewHouse[houseNumber].orEmpty()
+            
+            val labelLines = mutableListOf<String>()
+            labelLines.add(signNumber.toString())
+            if (planetsHere.isNotEmpty()) {
+                planetsHere.chunked(3).forEach { chunk ->
+                    labelLines.add(chunk.joinToString(" ") { p -> abbreviate(p.planet.name) })
                 }
             }
+
             drawContext.canvas.nativeCanvas.apply {
-                val paint = android.graphics.Paint().apply {
-                    color = android.graphics.Color.rgb(34, 25, 51)
+                val signPaint = android.graphics.Paint().apply {
+                    color = primaryColor
                     textAlign = android.graphics.Paint.Align.CENTER
-                    textSize = 26f
+                    textSize = 32f
                     isAntiAlias = true
                 }
-                label.split("\n").forEachIndexed { lineIdx, line ->
-                    drawText(line, anchor.x, anchor.y + lineIdx * 28f, paint)
+                val planetPaint = android.graphics.Paint().apply {
+                    color = onSurfaceColor
+                    textAlign = android.graphics.Paint.Align.CENTER
+                    textSize = 28f
+                    isAntiAlias = true
+                }
+
+                labelLines.forEachIndexed { lineIdx, line ->
+                    val paint = if (lineIdx == 0) signPaint else planetPaint
+                    val yOffset = if (lineIdx == 0) -15f else (lineIdx * 30f) - 10f
+                    drawText(line, anchor.x, anchor.y + yOffset, paint)
                 }
             }
         }
@@ -281,6 +355,14 @@ private fun DashaPeriodCard(period: DashaPeriod, isCurrent: Boolean) {
 }
 
 private fun abbreviate(planetName: String): String = when (planetName) {
-    "SUN" -> "Su"; "MOON" -> "Mo"; "MARS" -> "Ma"; "MERCURY" -> "Me"; "JUPITER" -> "Ju"
-    "VENUS" -> "Ve"; "SATURN" -> "Sa"; "RAHU" -> "Ra"; "KETU" -> "Ke"; else -> planetName.take(2)
+    "SUN" -> "\u0938\u0942"   // Su (Surya)
+    "MOON" -> "\u091a\u0902"  // Ch (Chandra)
+    "MARS" -> "\u092e\u0902"  // Ma (Mangala)
+    "MERCURY" -> "\u092c\u0941" // Bu (Budha)
+    "JUPITER" -> "\u0917\u0941" // Gu (Guru)
+    "VENUS" -> "\u0936\u0941"   // Sk (Shukra)
+    "SATURN" -> "\u0936"      // Sa (Shani)
+    "RAHU" -> "\u0930\u093e"    // Ra
+    "KETU" -> "\u0915\u0947"    // Ke
+    else -> planetName.take(2)
 }

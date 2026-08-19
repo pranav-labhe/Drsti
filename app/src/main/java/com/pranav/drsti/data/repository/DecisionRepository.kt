@@ -129,4 +129,11 @@ class DecisionRepository(
             outcomeAnalysisDao.insert(oaEntity)
         }
     }
+
+    suspend fun deleteDecision(id: Long) {
+        analysisDao.deleteByDecisionId(id)
+        outcomeDao.deleteByDecisionId(id)
+        outcomeAnalysisDao.deleteByDecisionId(id)
+        decisionDao.deleteById(id)
+    }
 }

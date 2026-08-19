@@ -7,12 +7,16 @@ import com.pranav.drsti.ai.provider.AiAstrologyService
 import com.pranav.drsti.data.repository.ChatRepository
 import com.pranav.drsti.data.repository.PersonRepository
 import com.pranav.drsti.database.dao.DashaDao
+import com.pranav.drsti.database.dao.DecisionAnalysisDao
+import com.pranav.drsti.database.dao.DecisionDao
 import com.pranav.drsti.database.dao.KundaliDao
 import com.pranav.drsti.database.dao.PanchangDao
 import com.pranav.drsti.database.dao.PlanetaryPositionDao
 import com.pranav.drsti.database.entity.ConversationMessageEntity
 import com.pranav.drsti.database.entity.PersonEntity
 import com.pranav.drsti.database.entity.ConversationEntity
+import com.pranav.drsti.database.entity.DecisionAnalysisEntity
+import com.pranav.drsti.database.entity.DecisionEntity
 import com.pranav.drsti.model.*
 import com.pranav.drsti.util.DateTimeUtil
 import com.pranav.drsti.model.CurrentTimeContext
@@ -21,9 +25,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -43,6 +52,7 @@ data class ChatUiState(
  * relevant AiRequestContext for each message (ContextBuilder responsibility,
  * spec §6) rather than shipping the whole database to the AI.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ChatViewModel(
     private val chatRepository: ChatRepository,
     private val personRepository: PersonRepository,
@@ -50,6 +60,8 @@ class ChatViewModel(
     private val kundaliDao: KundaliDao,
     private val dashaDao: DashaDao,
     private val planetaryPositionDao: PlanetaryPositionDao,
+    private val decisionDao: DecisionDao,
+    private val decisionAnalysisDao: DecisionAnalysisDao,
     private val aiServiceProvider: () -> AiAstrologyService
 ) : ViewModel() {
 
@@ -89,14 +101,22 @@ class ChatViewModel(
     val error: StateFlow<String?> = _error
 
     init {
-        // Load default conversation and observe its messages
+        // Load default conversation
         viewModelScope.launch {
             val conversation = chatRepository.getOrCreateDefaultConversation()
             _state.update { it.copy(conversationId = conversation.id) }
-            chatRepository.observeRecent(conversation.id).collect { msgs ->
-                _state.update { it.copy(messages = msgs.reversed()) }
-            }
         }
+
+        // Observe messages for the current conversation
+        viewModelScope.launch {
+            _state.map { it.conversationId }
+                .flatMapLatest { id ->
+                    if (id != null) chatRepository.observeRecent(id) else emptyFlow()
+                }.collect { msgs ->
+                    _state.update { it.copy(messages = msgs.reversed()) }
+                }
+        }
+
         // Observe active person
         viewModelScope.launch {
             personRepository.observeActive().collect { person ->
@@ -124,21 +144,31 @@ class ChatViewModel(
         // No additional action needed; conversations are already observed in init.
     }
 
-    /** Create a new conversation (no person association needed). */
-    fun createConversation(title: String = "Conversation ${System.currentTimeMillis()}") {
+    /** Create a new conversation. */
+    fun createConversation(title: String = "New Chat") {
         viewModelScope.launch {
             val now = java.time.Instant.now().toString()
             val entity = ConversationEntity(title = title, createdAt = now, updatedAt = now)
             val newId = chatRepository.createConversation(entity)
-            _state.update { it.copy(conversationId = newId) }
+            _state.update { it.copy(conversationId = newId, messages = emptyList()) }
         }
     }
 
     /** Select an existing conversation by its string ID. */
     fun selectConversation(conversationId: String) {
+        conversationId.toLongOrNull()?.let { id ->
+            _state.update { it.copy(conversationId = id) }
+        }
+    }
+
+    fun deleteConversation(id: String) {
         viewModelScope.launch {
-            conversationId.toLongOrNull()?.let { id ->
-                _state.update { it.copy(conversationId = id) }
+            id.toLongOrNull()?.let { longId ->
+                chatRepository.deleteConversation(longId)
+                if (_state.value.conversationId == longId) {
+                    val next = chatRepository.getOrCreateDefaultConversation()
+                    _state.update { it.copy(conversationId = next.id) }
+                }
             }
         }
     }
@@ -149,15 +179,65 @@ class ChatViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isSending = true) }
             _error.value = null
-            chatRepository.appendMessage(conversationId, "user", text)
+            
+            val person = _state.value.activePerson
 
-            runCatching {
-                val context = buildContext()
-                aiServiceProvider().chat(context, text)
-            }.onSuccess { reply ->
-                chatRepository.appendMessage(conversationId, "assistant", reply.text, reply.intent)
-            }.onFailure { t ->
-                _error.value = "Failed to get a response: ${t.message}"
+            val result = runCatching {
+                // Perform database operations and AI call on IO thread
+                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    // If this is the first user message, update the conversation title
+                    if (chatRepository.observeRecent(conversationId, 1).first().none { it.role == "user" }) {
+                        val title = if (text.length > 30) text.take(27) + "..." else text
+                        chatRepository.updateConversationTitle(conversationId, title)
+                    }
+
+                    chatRepository.appendMessage(conversationId, "user", text)
+                    
+                    val context = buildContext()
+                    val reply = aiServiceProvider().chat(context, text, conversationId)
+                    
+                    chatRepository.appendMessage(conversationId, "assistant", reply.text, reply.intent)
+                    
+                    // Handle structured decision if present
+                    reply.decisionAnalysis?.let { analysis ->
+                        val now = Instant.now().toString()
+                        val options = analysis.options.map { DecisionOptionInput(it.id, it.explanation) }
+                        
+                        val dId = decisionDao.insert(
+                            DecisionEntity(
+                                personId = person?.id ?: 0L,
+                                conversationId = conversationId,
+                                question = text,
+                                optionsJson = json.encodeToString(options),
+                                context = analysis.analysisSummary,
+                                status = "OPEN",
+                                createdAt = now
+                            )
+                        )
+                        
+                        decisionAnalysisDao.insert(
+                            DecisionAnalysisEntity(
+                                decisionId = dId,
+                                analysisJson = json.encodeToString(analysis),
+                                natalSnapshotJson = null,
+                                dashaSnapshotJson = null,
+                                panchangSnapshotJson = null,
+                                planetarySnapshotJson = null,
+                                promptVersion = "chat-v1-decision",
+                                model = reply.provenance.model ?: "unknown",
+                                inputHash = reply.provenance.inputHash,
+                                outputHash = reply.provenance.outputHash,
+                                analysisTimestamp = now
+                            )
+                        )
+                    }
+                    reply
+                }
+            }
+
+            result.onFailure { t ->
+                android.util.Log.e("DristiChat", "AI message flow failed", t)
+                _error.value = "Failed to get a response: ${t.localizedMessage ?: t.message}"
             }
 
             _state.update { it.copy(isSending = false) }
@@ -231,11 +311,16 @@ class ChatViewModel(
             kundaliDao: KundaliDao,
             dashaDao: DashaDao,
             planetaryPositionDao: PlanetaryPositionDao,
+            decisionDao: DecisionDao,
+            decisionAnalysisDao: DecisionAnalysisDao,
             aiServiceProvider: () -> AiAstrologyService
         ) = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                ChatViewModel(chatRepository, personRepository, panchangDao, kundaliDao, dashaDao, planetaryPositionDao, aiServiceProvider) as T
+                ChatViewModel(
+                    chatRepository, personRepository, panchangDao, kundaliDao, dashaDao, 
+                    planetaryPositionDao, decisionDao, decisionAnalysisDao, aiServiceProvider
+                ) as T
         }
     }
 }

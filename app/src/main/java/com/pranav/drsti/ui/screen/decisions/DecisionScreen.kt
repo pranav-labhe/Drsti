@@ -5,14 +5,17 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.AddChart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.pranav.drsti.database.entity.DecisionEntity
@@ -31,7 +34,7 @@ fun DecisionScreen(viewModel: DecisionViewModel, modifier: Modifier = Modifier) 
     val state by viewModel.state.collectAsState()
     var showNewDecision by remember { mutableStateOf(false) }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         when {
             state.selectedDetail != null -> DecisionDetailView(
                 state = state,
@@ -51,6 +54,7 @@ fun DecisionScreen(viewModel: DecisionViewModel, modifier: Modifier = Modifier) 
             else -> DecisionListView(
                 decisions = state.decisions,
                 onOpen = viewModel::openDecision,
+                onDelete = viewModel::deleteDecision,
                 onNew = { showNewDecision = true }
             )
         }
@@ -59,28 +63,61 @@ fun DecisionScreen(viewModel: DecisionViewModel, modifier: Modifier = Modifier) 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DecisionListView(decisions: List<DecisionEntity>, onOpen: (Long) -> Unit, onNew: () -> Unit) {
-    Column(Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Decision Journal") },
-            actions = { IconButton(onClick = onNew) { Icon(Icons.Filled.Add, contentDescription = "New decision") } }
-        )
+private fun DecisionListView(
+    decisions: List<DecisionEntity>, 
+    onOpen: (Long) -> Unit, 
+    onDelete: (Long) -> Unit,
+    onNew: () -> Unit
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Decision Journal", fontWeight = FontWeight.Bold) },
+                actions = { IconButton(onClick = onNew) { Icon(Icons.Filled.Add, contentDescription = "New decision") } }
+            )
+        }
+    ) { padding ->
         if (decisions.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
                 Text(
                     "No decisions yet. Tap + to compare your first set of options \u2014 D\u1e5b\u1e63\u1e6di will lay out astrological and timing support for each path, side by side.",
                     textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium
                 )
             }
         } else {
-            LazyColumn {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(padding).navigationBarsPadding(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 items(decisions, key = { it.id }) { decision ->
-                    ListItem(
-                        headlineContent = { Text(decision.question) },
-                        supportingContent = { Text(statusLabel(decision.status)) },
-                        modifier = Modifier.clickable { onOpen(decision.id) }
-                    )
-                    HorizontalDivider()
+                    ElevatedCard(
+                        onClick = { onOpen(decision.id) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            ListItem(
+                                headlineContent = { Text(decision.question, fontWeight = FontWeight.SemiBold, maxLines = 2) },
+                                supportingContent = { Text(statusLabel(decision.status)) },
+                                modifier = Modifier.weight(1f),
+                                colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
+                            )
+                            IconButton(
+                                onClick = { onDelete(decision.id) },
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Delete",
+                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -105,33 +142,57 @@ private fun NewDecisionForm(
     var context by remember { mutableStateOf("") }
     var options by remember { mutableStateOf(listOf("", "")) }
 
-    Column(Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("New decision") },
-            navigationIcon = { IconButton(onClick = onCancel) { Icon(Icons.Filled.Close, contentDescription = "Cancel") } }
-        )
-        Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("New Decision") },
+                navigationIcon = { IconButton(onClick = onCancel) { Icon(Icons.Filled.Close, contentDescription = "Cancel") } }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
             OutlinedTextField(
                 value = question, onValueChange = { question = it },
-                label = { Text("What are you deciding?") }, modifier = Modifier.fillMaxWidth()
+                label = { Text("What are you deciding?") }, 
+                modifier = Modifier.fillMaxWidth(),
+                shape = ShapeDefaults.Medium
             )
-            Text("Options", style = MaterialTheme.typography.titleSmall)
+            
+            Text("Options to Compare", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            
             options.forEachIndexed { index, value ->
                 OutlinedTextField(
                     value = value,
                     onValueChange = { new -> options = options.toMutableList().also { it[index] = new } },
                     label = { Text("Option ${('A' + index)}") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = ShapeDefaults.Medium,
+                    singleLine = true
                 )
             }
-            TextButton(onClick = { options = options + "" }) { Text("+ Add another option") }
+            
+            if (options.size < 5) {
+                TextButton(onClick = { options = options + "" }) { 
+                    Icon(Icons.Default.Add, null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Add another option") 
+                }
+            }
 
             OutlinedTextField(
                 value = context, onValueChange = { context = it },
-                label = { Text("Context (optional)") }, modifier = Modifier.fillMaxWidth(), minLines = 2
+                label = { Text("Background Context (optional)") }, 
+                modifier = Modifier.fillMaxWidth(), 
+                minLines = 3,
+                shape = ShapeDefaults.Medium
             )
 
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+
+            Spacer(Modifier.weight(1f))
 
             Button(
                 onClick = {
@@ -139,8 +200,13 @@ private fun NewDecisionForm(
                         .mapIndexed { i, desc -> DecisionOptionInput(id = ('A' + i).toString(), description = desc) }
                     onSubmit(question, optionInputs, context.ifBlank { null }, null)
                 },
-                enabled = !isBusy && question.isNotBlank() && options.count { it.isNotBlank() } >= 2
-            ) { Text(if (isBusy) "Analyzing\u2026" else "Compare paths") }
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isBusy && question.isNotBlank() && options.count { it.isNotBlank() } >= 2,
+                shape = ShapeDefaults.Medium
+            ) { 
+                if (isBusy) CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+                else Text("Run Vedic Analysis") 
+            }
         }
     }
 }
@@ -156,17 +222,31 @@ private fun DecisionDetailView(
     val detail = state.selectedDetail ?: return
     var showOutcomeForm by remember { mutableStateOf(false) }
 
-    Column(Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text(detail.decision.question, maxLines = 1) },
-            navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") } }
-        )
-
-        LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            detail.decision.context?.let { item { Text(it, style = MaterialTheme.typography.bodyMedium) } }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Analysis Detail") },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } }
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                Text(detail.decision.question, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                detail.decision.context?.let { 
+                    Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) 
+                }
+            }
 
             detail.analysis?.let { analysis ->
-                item { Text(analysis.analysisSummary, style = MaterialTheme.typography.bodyMedium) }
+                item { 
+                    Text(analysis.analysisSummary, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary) 
+                }
+                
                 items(analysis.options) { option ->
                     OptionCard(
                         option = option,
@@ -176,17 +256,21 @@ private fun DecisionDetailView(
                         onSelect = { onRecordSelection(detail.decision.id, option.id) }
                     )
                 }
+                
                 if (analysis.caveats.isNotEmpty()) {
                     item {
-                        Column {
-                            analysis.caveats.forEach { Text("\u2022 $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f))) {
+                            Column(Modifier.padding(12.dp)) {
+                                analysis.caveats.forEach { Text("\u2022 $it", style = MaterialTheme.typography.labelSmall) }
+                            }
                         }
                     }
                 }
+                
                 item {
                     Text(
-                        "Analyzed ${analysis.provenance.generatedAt.take(19)} \u2022 confidence: ${analysis.confidence}. " +
-                                "This snapshot is preserved as-is and will never be rewritten, even after you record an outcome.",
+                        "Analyzed ${analysis.provenance.generatedAt.take(19).replace("T", " ")} \u2022 confidence: ${analysis.confidence}. " +
+                                "This snapshot is preserved immutably per D\u1e5b\u1e63\u1e6di spec.",
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -195,7 +279,9 @@ private fun DecisionDetailView(
             if (detail.decision.status == "DECIDED" && detail.outcome == null) {
                 item {
                     if (!showOutcomeForm) {
-                        OutlinedButton(onClick = { showOutcomeForm = true }) { Text("Record what happened") }
+                        Button(onClick = { showOutcomeForm = true }, modifier = Modifier.fillMaxWidth()) { 
+                            Text("Record Outcome") 
+                        }
                     } else {
                         OutcomeForm(onSubmit = { desc, assessment, notes ->
                             onRecordOutcome(detail.decision.id, desc, assessment, notes)
@@ -207,23 +293,30 @@ private fun DecisionDetailView(
 
             detail.outcome?.let { outcome ->
                 item {
-                    Card {
-                        Column(Modifier.padding(12.dp)) {
-                            Text("What happened", style = MaterialTheme.typography.titleSmall)
-                            Text(outcome.description, style = MaterialTheme.typography.bodySmall)
-                            Text("Assessment: ${outcome.userAssessment}", style = MaterialTheme.typography.labelSmall)
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text("The Reality", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(8.dp))
+                            Text(outcome.description, style = MaterialTheme.typography.bodyMedium)
+                            Text("Assessment: ${outcome.userAssessment}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
             }
+            
             detail.outcomeAnalysis?.let { oa ->
                 item {
-                    Card {
-                        Column(Modifier.padding(12.dp)) {
-                            Text("Retrospective analysis", style = MaterialTheme.typography.titleSmall)
+                    ElevatedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text("Retrospective Alignment", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(8.dp))
                             Text(oa.scoreCalibrationNote, style = MaterialTheme.typography.bodySmall)
-                            oa.alignedIndicators.forEach { Text("\u2713 $it", style = MaterialTheme.typography.labelSmall) }
-                            oa.misalignedIndicators.forEach { Text("\u2717 $it", style = MaterialTheme.typography.labelSmall) }
+                            Spacer(Modifier.height(4.dp))
+                            oa.alignedIndicators.forEach { Text("\u2713 $it", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) }
+                            oa.misalignedIndicators.forEach { Text("\u2717 $it", style = MaterialTheme.typography.bodySmall) }
                         }
                     }
                 }
@@ -234,22 +327,49 @@ private fun DecisionDetailView(
 
 @Composable
 private fun OptionCard(option: DecisionOptionAnalysis, isPreferred: Boolean, isSelected: Boolean, canSelect: Boolean, onSelect: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)) {
-        Column(Modifier.padding(12.dp)) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer 
+                             else if (isPreferred) MaterialTheme.colorScheme.surfaceVariant
+                             else MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(Modifier.padding(16.dp)) {
             Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Text("Option ${option.id}" + if (isPreferred) " \u2b50" else "", style = MaterialTheme.typography.titleSmall)
-                Text("${option.astrologicalSupport}% astrological \u2022 ${option.timingSupport}% timing", style = MaterialTheme.typography.labelSmall)
+                Text("Option ${option.id}" + if (isPreferred) " \u2b50" else "", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Surface(
+                    color = MaterialTheme.colorScheme.primary,
+                    shape = ShapeDefaults.Small
+                ) {
+                    Text(
+                        "${option.astrologicalSupport}% Support", 
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
             }
-            Spacer(Modifier.height(4.dp))
-            Text(option.explanation, style = MaterialTheme.typography.bodySmall)
-            option.strengths.forEach { Text("+ $it", style = MaterialTheme.typography.labelSmall) }
-            option.concerns.forEach { Text("\u26A0 $it", style = MaterialTheme.typography.labelSmall) }
+            
+            Spacer(Modifier.height(8.dp))
+            Text(option.explanation, style = MaterialTheme.typography.bodyMedium)
+            
+            if (option.strengths.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                option.strengths.forEach { Text("+ $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
+            }
+            
+            if (option.concerns.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                option.concerns.forEach { Text("\u26A0 $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+            }
+            
             if (canSelect) {
-                Spacer(Modifier.height(8.dp))
-                Button(onClick = onSelect) { Text("I chose this") }
+                Spacer(Modifier.height(16.dp))
+                Button(onClick = onSelect, modifier = Modifier.fillMaxWidth()) { Text("I chose this path") }
             } else if (isSelected) {
-                Spacer(Modifier.height(8.dp))
-                AssistChip(onClick = {}, label = { Text("Your choice") })
+                Spacer(Modifier.height(12.dp))
+                AssistChip(onClick = {}, label = { Text("Your actual choice") }, leadingIcon = { Icon(Icons.Default.AddChart, null, modifier = Modifier.size(16.dp)) })
             }
         }
     }
@@ -261,22 +381,40 @@ private fun OutcomeForm(onSubmit: (String, String, String?) -> Unit) {
     var assessment by remember { mutableStateOf("As expected") }
     var notes by remember { mutableStateOf("") }
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("What happened?") }, modifier = Modifier.fillMaxWidth())
-        Row {
-            listOf("Better than expected", "As expected", "Worse than expected").forEach { option ->
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Record what actually happened:", style = MaterialTheme.typography.labelLarge)
+        
+        OutlinedTextField(
+            value = description, onValueChange = { description = it }, 
+            label = { Text("Outcome Summary") }, 
+            modifier = Modifier.fillMaxWidth(),
+            shape = ShapeDefaults.Medium
+        )
+        
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("Better", "As expected", "Worse").forEach { option ->
                 FilterChip(
-                    selected = assessment == option, onClick = { assessment = option },
-                    label = { Text(option) }, modifier = Modifier.padding(end = 4.dp)
+                    selected = assessment.contains(option), 
+                    onClick = { assessment = option },
+                    label = { Text(option) },
+                    modifier = Modifier.weight(1f)
                 )
             }
         }
-        OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notes (optional)") }, modifier = Modifier.fillMaxWidth())
-        Button(onClick = { onSubmit(description, assessment, notes.ifBlank { null }) }, enabled = description.isNotBlank()) {
-            Text("Save outcome")
+        
+        OutlinedTextField(
+            value = notes, onValueChange = { notes = it }, 
+            label = { Text("Reflections (optional)") }, 
+            modifier = Modifier.fillMaxWidth(),
+            shape = ShapeDefaults.Medium
+        )
+        
+        Button(
+            onClick = { onSubmit(description, assessment, notes.ifBlank { null }) }, 
+            enabled = description.isNotBlank(),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Save Outcome")
         }
     }
 }
-
-private fun Modifier.clickable(onClick: () -> Unit): Modifier =
-    this.clickable(onClick = onClick)

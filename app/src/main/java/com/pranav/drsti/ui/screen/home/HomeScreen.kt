@@ -1,6 +1,8 @@
 package com.pranav.drsti.ui.screen.home
 
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddChart
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -57,6 +59,8 @@ fun HomeScreen(
             serviceLocator.database.kundaliDao(),
             serviceLocator.database.dashaDao(),
             serviceLocator.database.planetaryPositionDao(),
+            serviceLocator.database.decisionDao(),
+            serviceLocator.database.decisionAnalysisDao(),
             { serviceLocator.aiService.value }
         )
     )
@@ -96,6 +100,7 @@ fun HomeScreen(
     )
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             NavigationBar {
                 tabs.forEach { tab ->
@@ -105,7 +110,7 @@ fun HomeScreen(
                             navController.navigate(tab.route) {
                                 popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                                 launchSingleTop = true
-                                restoreState = true
+                                restoreState = false
                             }
                         },
                         icon = { Icon(tab.icon, contentDescription = tab.label) },
@@ -115,10 +120,13 @@ fun HomeScreen(
             }
         }
     ) { padding ->
+        // Use bottom padding from scaffold to ensure child screens stay above the navigation bar
         NavHost(
             navController = navController,
             startDestination = HomeTab.Chat.route,
-            modifier = Modifier.padding(padding)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = padding.calculateBottomPadding())
         ) {
             composable(HomeTab.Chat.route) {
                 ChatScreen(

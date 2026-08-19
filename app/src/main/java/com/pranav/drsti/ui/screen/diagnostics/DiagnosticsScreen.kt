@@ -3,6 +3,7 @@ package com.pranav.drsti.ui.screen.diagnostics
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteSweep
@@ -29,7 +30,7 @@ fun DiagnosticsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("AI Diagnostics Log") },
+                title = { Text("AI Diagnostics Log", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
@@ -46,13 +47,15 @@ fun DiagnosticsScreen(
                 Text("No AI logs recorded yet.", style = MaterialTheme.typography.bodyMedium)
             }
         } else {
-            LazyColumn(
-                modifier = modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(state.logs, key = { it.id }) { log ->
-                    LogItem(log)
+            SelectionContainer(modifier = Modifier.fillMaxSize().padding(padding)) {
+                LazyColumn(
+                    modifier = modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(state.logs, key = { it.id }) { log ->
+                        LogItem(log)
+                    }
                 }
             }
         }

@@ -31,38 +31,43 @@ fun PlaceScreen(
 
     Scaffold(
         topBar = {
-            LargeTopAppBar(
+            TopAppBar(
                 title = { Text("Saved Places", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
                 actions = {
                     IconButton(onClick = { showAdd = !showAdd }) { 
-                        Icon(if (showAdd) Icons.Default.Add else Icons.Default.Add, contentDescription = "Add place") 
+                        Icon(Icons.Default.Add, contentDescription = "Add place")
                     }
                 }
             )
         }
     ) { padding ->
         Column(modifier = modifier.fillMaxSize().padding(padding)) {
-            OutlinedTextField(
-                value = state.query, onValueChange = viewModel::onQueryChange,
-                label = { Text("Search city or town") },
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                leadingIcon = { Icon(Icons.Default.Search, null) },
-                singleLine = true,
-                shape = ShapeDefaults.Medium
-            )
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 2.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = state.query, onValueChange = viewModel::onQueryChange,
+                    label = { Text("Search city or town") },
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    singleLine = true,
+                    shape = ShapeDefaults.Medium
+                )
+            }
 
             if (showAdd) {
                 AddPlaceForm(onSave = { entity -> viewModel.save(entity) { showAdd = false } })
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             }
 
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(state.searchResults, key = { it.id }) { place ->
                     PlaceItem(
@@ -77,14 +82,18 @@ fun PlaceScreen(
 
 @Composable
 private fun PlaceItem(place: PlaceEntity, onDelete: () -> Unit) {
-    OutlinedCard(
+    ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = ShapeDefaults.Medium
+        shape = ShapeDefaults.Medium,
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         ListItem(
-            headlineContent = { Text(place.name, fontWeight = FontWeight.SemiBold) },
+            headlineContent = { Text(place.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium) },
             supportingContent = { 
-                Text("${place.state ?: ""}, ${place.country}\nLat: ${place.latitude}, Lon: ${place.longitude} (${place.timezone})") 
+                Text(
+                    text = "${place.state ?: ""}, ${place.country}\nLat: ${place.latitude}, Lon: ${place.longitude} (${place.timezone})",
+                    style = MaterialTheme.typography.bodySmall
+                )
             },
             trailingContent = {
                 if (place.isUserCreated) {
