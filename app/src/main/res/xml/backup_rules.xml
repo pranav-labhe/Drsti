@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data_extraction_rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="drsti_secure_prefs.xml" />
+        <exclude domain="sharedpref" path="drsti_secure_prefs.xml_encrypted.preferences_pb" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="drsti_secure_prefs.xml" />
+    </device-transfer>
+</data_extraction_rules>
