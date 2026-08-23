@@ -4,11 +4,20 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- A simple stylised eye / "drsti" (sight) mark -->
+    <!-- A simple stylised eye with the lens focusing on diamond, "drsti" (sight) mark -->
     <path
         android:strokeColor="#F5A623"
         android:strokeWidth="1"
         android:pathData="M54,24 L62,58 L54,90 L46,58 Z" />
+    <!-- Top corner -->
+    <path
+        android:fillColor="#F5A623"
+        android:pathData="M54,24 L56,30 L54,33 L52,30 Z" />
+
+    <!-- Bottom corner -->
+    <path
+        android:fillColor="#F5A623"
+        android:pathData="M54,90 L56,84 L54,81 L52,84 Z" />
 
     <path
         android:fillColor="#F5A623"

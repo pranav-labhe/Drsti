@@ -137,7 +137,7 @@ fun HomeScreen(
             startDestination = HomeTab.Chat.route,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = 72.dp)
+                .padding(bottom = 78.dp)
         ) {
             composable(HomeTab.Chat.route) {
                 ChatScreen(
