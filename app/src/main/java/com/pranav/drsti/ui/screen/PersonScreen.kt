@@ -81,6 +81,19 @@ fun PersonScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
+                    shape = ShapeDefaults.Medium,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Privacy Note: Your birth details are stored securely on this phone and NEVER sent to our servers. The responsibility for maintaining and securing this data on your device stands wholly with you.",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(12.dp),
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+                
                 Text("New Profile", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
                 Text("Enter birth details to unlock personalized Vedic analysis.", style = MaterialTheme.typography.bodySmall)
 

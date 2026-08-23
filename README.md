@@ -51,31 +51,22 @@ either update it or simplify that block to `compileSdk = 37` and drop the
 - **Panchang** — Vara, Tithi, Nakshatra, Yoga, Karana, sunrise/sunset,
   Rahu Kalam, Yamaganda, Gulika Kalam, Abhijit Muhurta — cached per
   date+location so it's never recalculated needlessly.
+- **Decision Journal** — Full lifecycle management for comparing choices with
+  astrological support scores, recording selections, and retrospective
+  outcome calibration. See `ui/screen/decisions/DecisionScreen.kt`.
 - **Profile & Places** — fully offline person/place database, seeded with a
   dozen major Indian cities, editable lat/long/timezone.
-- **Settings** — MOCK/LIVE AI toggle, model name, encrypted API key storage
-  (`androidx.security-crypto`), cache/diagnostics controls.
+- **Settings** — MOCK/LIVE/GEMINI AI modes, model selection, hardware-encrypted
+  API key storage (`androidx.security-crypto`).
+- **Guided BYOK Setup** — A non-technical, guided flow for users to connect
+  their own Gemini API keys from Google AI Studio. Includes smart
+  auto-detection of keys from the clipboard.
 - **MOCK AI mode by default** — the whole app is usable with zero API key
-  and zero network calls. LIVE mode (optional) sends only interpretive text
-  to a configured OpenAI-compatible endpoint; positions are still always
-  computed locally.
+  and zero network calls. LIVE/GEMINI modes (optional) send only interpretive
+  text to your own configured endpoint; positions are still always computed
+  locally.
 - Unit tests for the astronomical engine, sign/nakshatra mapping, hashing,
   and score validation (`app/src/test`).
-
-## What's scaffolded but not wired into a screen yet
-
-The full data model, Room entities/DAOs, and `AiAstrologyService` methods
-for **Transit analysis**, **Decision analysis** (option comparison with
-astrological/timing support scores), **Decision Journal** (immutable
-pre-decision snapshots), and **Outcome recording/calibration** are all
-present and functional in code — `analyzeTransits`, `analyzeDecision`,
-`analyzeOutcome` on `AiAstrologyService`, and the `DecisionEntity` /
-`DecisionAnalysisEntity` / `DecisionOutcomeEntity` / `OutcomeAnalysisEntity`
-tables. There just isn't a dedicated screen for them yet in this pass, since
-they weren't part of the requested folder structure. Adding a
-`ui/screen/decisions/DecisionScreen.kt` + `DecisionViewModel.kt` following
-the exact same pattern as `KundaliViewModel`/`PanchangViewModel` is the
-natural next step — ask and I'll add it.
 
 ## Architecture
 
@@ -102,26 +93,27 @@ Compose UI  →  ViewModel  →  Repository / AiAstrologyService  →  Room / As
 ## AI modes
 
 - **MOCK** (default): zero cost, fully offline. Positions/Kundali/Panchang/
-  Dasha come from `AstroCalc`; the interpretive layer (decision comparisons,
-  transit notes, chat replies) is deterministic rule-based text, clearly
-  generated from your real chart/Dasha/Panchang data rather than random or
-  templated filler.
-- **LIVE**: set your OpenAI-compatible API key in Settings. Only the
-  interpretive capabilities call the network; astronomical positions are
-  never sent *to be calculated* by the model, only supplied *to* it as
-  already-computed input.
-
-## Astrology system (fixed for V1)
-
-Sidereal zodiac · Lahiri ayanamsha · Whole Sign houses · Vimshottari Dasha.
+  Dasha come from `AstroCalc`; the interpretive layer is deterministic
+  rule-based text.
+- **LIVE** (OpenAI): set your own OpenAI-compatible API key.
+- **GEMINI** (Google): Bring your own Gemini API key via the guided
+  setup flow. Uses Google's native Interactions API for intelligent
+  astrological reasoning while maintaining a private, local-only conversation
+  history.
 
 ## Privacy
 
 Birth data, chat history, and everything else lives in a local Room
-database on-device. The API key lives in `EncryptedSharedPreferences`. LIVE
-mode only ever sends the minimum context needed for the specific request
-(no whole-database dumps) — see how each ViewModel builds its own
-`AiRequestContext`.
+database on-device. The API keys live in hardware-backed `EncryptedSharedPreferences`.
+The app uses a "Privacy by Design" approach for AI:
+- **Bring Your Own Key (BYOK)**: Users provide their own keys from their
+  own accounts.
+- **Minimal Context**: Only the specific data points needed for the
+  interpretation (e.g., current Dasha lord, Nakshatra) are sent to the AI.
+- **No PII in AI Logs**: Database logs store SHA-256 hashes of inputs, never
+  plain text.
+- **Smart Clipboard Detection**: The app only reads the clipboard to detect
+  an `AIza` pattern key; this processing is strictly local and never logged.
 
 ## Running it
 
