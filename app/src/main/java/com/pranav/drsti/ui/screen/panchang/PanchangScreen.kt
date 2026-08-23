@@ -13,8 +13,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.pranav.drsti.model.PanchangData
+import com.pranav.drsti.ui.PreviewSamples
+import com.pranav.drsti.ui.theme.DrshtiTheme
 import com.pranav.drsti.ui.viewmodel.PanchangViewModel
 import java.time.format.DateTimeFormatter
 
@@ -141,5 +144,13 @@ private fun PanchangRow(label: String, value: String) {
             Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
             Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PanchangScreenPreview() {
+    DrshtiTheme {
+        PanchangContent(data = PreviewSamples.panchang, fromCache = false)
     }
 }

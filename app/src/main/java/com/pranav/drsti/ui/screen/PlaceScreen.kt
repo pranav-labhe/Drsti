@@ -14,8 +14,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.pranav.drsti.database.entity.PlaceEntity
+import com.pranav.drsti.ui.PreviewSamples
+import com.pranav.drsti.ui.theme.DrshtiTheme
 import com.pranav.drsti.ui.viewmodel.PlaceViewModel
 
 /** Fully local/offline, editable place database (spec §15). No Google Maps dependency. */
@@ -164,4 +167,16 @@ private fun AddPlaceForm(onSave: (PlaceEntity) -> Unit) {
         }
     }
 }
+
+@Preview(showBackground = true)
+@Composable
+private fun PlaceScreenPreview() {
+    DrshtiTheme {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            PlaceItem(place = PreviewSamples.place, onDelete = {})
+            AddPlaceForm(onSave = {})
+        }
+    }
+}
+
 

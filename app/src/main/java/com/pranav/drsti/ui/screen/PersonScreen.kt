@@ -18,9 +18,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.pranav.drsti.database.entity.PersonEntity
 import com.pranav.drsti.database.entity.PlaceEntity
+import com.pranav.drsti.ui.PreviewSamples
+import com.pranav.drsti.ui.theme.DrshtiTheme
 import com.pranav.drsti.ui.viewmodel.PersonViewModel
 import com.pranav.drsti.ui.viewmodel.PlaceViewModel
 import java.time.Instant
@@ -291,6 +294,21 @@ private fun ProfileCard(
         }
     }
 }
+
+@Preview(showBackground = true)
+@Composable
+private fun PersonScreenPreview() {
+    DrshtiTheme {
+        Column(Modifier.padding(16.dp)) {
+            ProfileCard(
+                person = PreviewSamples.person,
+                onUse = {},
+                onDelete = {}
+            )
+        }
+    }
+}
+
 
 private fun Modifier.clickableRow(onClick: () -> Unit): Modifier =
     this.clickable(onClick = onClick)

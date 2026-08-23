@@ -14,8 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.pranav.drsti.database.DrishtiDatabase
+import com.pranav.drsti.ui.theme.DrshtiTheme
 import com.pranav.drsti.ui.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -290,6 +292,31 @@ private fun OutlinedListItem(headline: String, supporting: String, onClick: () -
         }
     }
 }
+
+@Preview(showBackground = true)
+@Composable
+private fun SettingsScreenPreview() {
+    DrshtiTheme {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            SettingsGroup(title = "Account & Personalization") {
+                OutlinedListItem(headline = "Birth Profile", supporting = "Manage your birth details", onClick = {})
+            }
+            SettingsGroup(title = "AI Configuration") {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = true, onClick = {}, label = { Text("MOCK") })
+                    FilterChip(selected = false, onClick = {}, label = { Text("LIVE") })
+                }
+            }
+        }
+    }
+}
+
 
 @Composable
 private fun InfoItem(label: String, value: String) {

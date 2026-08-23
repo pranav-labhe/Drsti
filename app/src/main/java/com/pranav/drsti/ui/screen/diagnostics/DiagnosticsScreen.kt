@@ -13,9 +13,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pranav.drsti.database.entity.AIRequestLogEntity
+import com.pranav.drsti.ui.PreviewSamples
+import com.pranav.drsti.ui.theme.DrshtiTheme
 import com.pranav.drsti.ui.viewmodel.DiagnosticsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -118,3 +121,24 @@ private fun LogItem(log: AIRequestLogEntity) {
         }
     }
 }
+
+@Preview(showBackground = true)
+@Composable
+private fun DiagnosticsScreenPreview() {
+    DrshtiTheme {
+        Scaffold { padding ->
+            SelectionContainer(modifier = Modifier.fillMaxSize().padding(padding)) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(PreviewSamples.logs) { log ->
+                        LogItem(log)
+                    }
+                }
+            }
+        }
+    }
+}
+
