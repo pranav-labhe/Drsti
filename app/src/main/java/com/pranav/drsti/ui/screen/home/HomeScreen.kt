@@ -1,5 +1,6 @@
 package com.pranav.drsti.ui.screen.home
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,20 +10,29 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.pranav.drsti.di.ServiceLocator
+import com.pranav.drsti.ui.PreviewSamples
 import com.pranav.drsti.ui.screen.chat.ChatScreen
+import com.pranav.drsti.ui.screen.chat.ChatInputBar
+import com.pranav.drsti.ui.screen.chat.ChatBubble
 import com.pranav.drsti.ui.screen.decisions.DecisionScreen
 import com.pranav.drsti.ui.screen.kundali.KundaliScreen
 import com.pranav.drsti.ui.screen.panchang.PanchangScreen
 import com.pranav.drsti.ui.screen.settings.SettingsScreen
+import com.pranav.drsti.ui.theme.DrshtiTheme
 import com.pranav.drsti.ui.viewmodel.*
 
 private sealed class HomeTab(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
@@ -40,6 +50,7 @@ private val tabs = listOf(HomeTab.Chat, HomeTab.Decisions, HomeTab.Kundali, Home
  * default/start tab — Kundali, Panchang, Dasha info and Settings remain one
  * tap away as supporting screens rather than the primary flow.
  */
+
 @Composable
 fun HomeScreen(
     serviceLocator: ServiceLocator,
@@ -126,7 +137,7 @@ fun HomeScreen(
             startDestination = HomeTab.Chat.route,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = padding.calculateBottomPadding())
+                .padding(bottom = 72.dp)
         ) {
             composable(HomeTab.Chat.route) {
                 ChatScreen(
@@ -159,3 +170,60 @@ fun HomeScreen(
 @Composable
 private inline fun <reified VM : androidx.lifecycle.ViewModel> viewModel(factory: androidx.lifecycle.ViewModelProvider.Factory): VM =
     androidx.lifecycle.viewmodel.compose.viewModel(factory = factory)
+
+@Preview(showBackground = true)
+@Composable
+private fun HomeScreenPreview() {
+    DrshtiTheme {
+        Scaffold(
+            topBar = {
+                @OptIn(ExperimentalMaterial3Api::class)
+                TopAppBar(
+                    title = { Text("D\u1e5b\u1e63\u1e6di", style = MaterialTheme.typography.titleLarge) },
+                    navigationIcon = { IconButton(onClick = {}) { Icon(Icons.Default.Menu, contentDescription = "Menu") } }
+                )
+            },
+            bottomBar = {
+                NavigationBar {
+                    tabs.forEach { tab ->
+                        NavigationBarItem(
+                            selected = tab == HomeTab.Chat,
+                            onClick = { },
+                            icon = { Icon(tab.icon, contentDescription = tab.label) },
+                            label = { Text(tab.label) }
+                        )
+                    }
+                }
+            }
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                // Mimic ChatScreen content within the HomeScreen shell
+                Box(modifier = Modifier.weight(1f)) {
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(PreviewSamples.messages.size) { index ->
+                            ChatBubble(PreviewSamples.messages[index])
+                        }
+                    }
+                }
+
+                ChatInputBar(
+                    value = "",
+                    onValueChange = {},
+                    onSend = {},
+                    enabled = true
+                )
+            }
+        }
+    }
+}
+
+
+

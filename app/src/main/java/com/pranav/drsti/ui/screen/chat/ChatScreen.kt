@@ -16,18 +16,22 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.ParagraphStyle
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pranav.drsti.database.entity.ConversationMessageEntity
 import com.pranav.drsti.model.Conversation
+import com.pranav.drsti.ui.PreviewSamples
+import com.pranav.drsti.ui.theme.DrshtiTheme
 import com.pranav.drsti.ui.viewmodel.ChatViewModel
 import kotlinx.coroutines.launch
 
@@ -236,7 +240,7 @@ private fun EmptyChatPrompt(
 }
 
 @Composable
-private fun ChatBubble(message: ConversationMessageEntity) {
+fun ChatBubble(message: ConversationMessageEntity) {
     val isUser = message.role == "user"
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -252,45 +256,120 @@ private fun ChatBubble(message: ConversationMessageEntity) {
             modifier = Modifier.widthIn(max = 320.dp),
             tonalElevation = if (isUser) 0.dp else 2.dp
         ) {
-            val content = message.content
-            val annotatedString = remember(content) {
-                buildAnnotatedString {
-                    var lastIndex = 0
-                    // Match bold, italics, and list bullets
-                    val regex = Regex("(\\*\\*.*?\\*\\*)|(\\*.*?\\*)|(^\\s*[-•]\\s+.*$)", RegexOption.MULTILINE)
-                    regex.findAll(content).forEach { match ->
-                        append(content.substring(lastIndex, match.range.first))
-                        val text = match.value
-                        when {
-                            text.startsWith("**") && text.endsWith("**") -> {
-                                withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
-                                    append(text.substring(2, text.length - 2))
-                                }
-                            }
-                            text.startsWith("*") && text.endsWith("*") -> {
-                                withStyle(style = SpanStyle(fontStyle = FontStyle.Italic)) {
-                                    append(text.substring(1, text.length - 1))
-                                }
-                            }
-                            text.trim().startsWith("-") || text.trim().startsWith("•") -> {
-                                append("  • ")
-                                append(text.trim().substring(1).trim())
-                            }
-                            else -> append(text)
-                        }
-                        lastIndex = match.range.last + 1
+            if (isUser) {
+                Text(
+                    message.content,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            } else {
+                MarkdownText(
+                    message.content,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MarkdownText(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+    style: TextStyle = LocalTextStyle.current
+) {
+    val lines = text.split('\n')
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        lines.forEach { line ->
+            val trimmedLine = line.trim()
+            when {
+                trimmedLine.startsWith("#### ") -> Text(
+                    text = renderInlineMarkdown(trimmedLine.removePrefix("#### ")),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = color
+                )
+                trimmedLine.startsWith("### ") -> Text(
+                    text = renderInlineMarkdown(trimmedLine.removePrefix("### ")),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = color
+                )
+                trimmedLine.startsWith("## ") -> Text(
+                    text = renderInlineMarkdown(trimmedLine.removePrefix("## ")),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = color
+                )
+                trimmedLine.startsWith("# ") -> Text(
+                    text = renderInlineMarkdown(trimmedLine.removePrefix("# ")),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = color
+                )
+                trimmedLine == "---" || trimmedLine == "***" -> HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+                trimmedLine.startsWith("- ") || trimmedLine.startsWith("* ") -> {
+                    Row {
+                        Text("• ", style = style, color = color)
+                        Text(text = renderInlineMarkdown(trimmedLine.substring(2)), style = style, color = color)
                     }
-                    append(content.substring(lastIndex))
+                }
+                trimmedLine.firstOrNull()?.isDigit() == true && trimmedLine.contains(". ") -> {
+                    val parts = trimmedLine.split(". ", limit = 2)
+                    if (parts.size == 2 && parts[0].all { it.isDigit() }) {
+                        Row {
+                            Text("${parts[0]}. ", style = style, color = color)
+                            Text(text = renderInlineMarkdown(parts[1]), style = style, color = color)
+                        }
+                    } else {
+                        Text(text = renderInlineMarkdown(line), style = style, color = color)
+                    }
+                }
+                trimmedLine.isBlank() -> Spacer(Modifier.height(4.dp))
+                else -> Text(text = renderInlineMarkdown(line), style = style, color = color)
+            }
+        }
+    }
+}
+
+private fun renderInlineMarkdown(text: String): androidx.compose.ui.text.AnnotatedString {
+    return buildAnnotatedString {
+        var lastIndex = 0
+        // Match bold (**text**), italic (*text*), and inline code (`code`)
+        val regex = Regex("(\\*\\*.*?\\*\\*)|(\\*.*?\\*)|(`.*?`)")
+        regex.findAll(text).forEach { match ->
+            append(text.substring(lastIndex, match.range.first))
+            val matchText = match.value
+            when {
+                matchText.startsWith("**") -> {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                        append(matchText.substring(2, matchText.length - 2))
+                    }
+                }
+                matchText.startsWith("*") -> {
+                    withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
+                        append(matchText.substring(1, matchText.length - 1))
+                    }
+                }
+                matchText.startsWith("`") -> {
+                    withStyle(SpanStyle(
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        background = Color.Black.copy(alpha = 0.08f)
+                    )) {
+                        append(matchText.substring(1, matchText.length - 1))
+                    }
                 }
             }
-            Text(
-                text = annotatedString,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyMedium,
-                lineHeight = 20.sp
-            )
+            lastIndex = match.range.last + 1
         }
+        append(text.substring(lastIndex))
     }
 }
 
@@ -312,7 +391,7 @@ private fun TypingIndicator() {
 }
 
 @Composable
-private fun ChatInputBar(value: String, onValueChange: (String) -> Unit, onSend: () -> Unit, enabled: Boolean, modifier: Modifier = Modifier) {
+fun ChatInputBar(value: String, onValueChange: (String) -> Unit, onSend: () -> Unit, enabled: Boolean, modifier: Modifier = Modifier) {
     Surface(
         tonalElevation = 8.dp,
         shadowElevation = 8.dp,
@@ -442,3 +521,73 @@ private fun ChatDrawerContent(
         }
     }
 }
+
+@Preview(showBackground = true)
+@Composable
+private fun ChatScreenPreview() {
+    DrshtiTheme {
+        Scaffold(
+            bottomBar = {
+                NavigationBar {
+                    NavigationBarItem(
+                        selected = true,
+                        onClick = { },
+                        icon = { Icon(Icons.Default.Chat, contentDescription = "Chat") },
+                        label = { Text("Chat") }
+                    )
+                    NavigationBarItem(
+                        selected = false,
+                        onClick = { },
+                        icon = { Icon(Icons.Default.AddChart, contentDescription = "Decisions") },
+                        label = { Text("Decisions") }
+                    )
+                    NavigationBarItem(
+                        selected = false,
+                        onClick = { },
+                        icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "Kundali") },
+                        label = { Text("Kundali") }
+                    )
+                    NavigationBarItem(
+                        selected = false,
+                        onClick = { },
+                        icon = { Icon(Icons.Default.CalendarMonth, contentDescription = "Panchang") },
+                        label = { Text("Panchang") }
+                    )
+                    NavigationBarItem(
+                        selected = false,
+                        onClick = { },
+                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+                        label = { Text("Settings") }
+                    )
+                }
+            }
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(PreviewSamples.messages) { message ->
+                            ChatBubble(message)
+                        }
+                    }
+                }
+
+                ChatInputBar(
+                    value = "",
+                    onValueChange = {},
+                    onSend = {},
+                    enabled = true
+                )
+            }
+        }
+    }
+}
+
+

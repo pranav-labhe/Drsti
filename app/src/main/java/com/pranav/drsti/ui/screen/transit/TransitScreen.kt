@@ -11,9 +11,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.pranav.drsti.model.PlanetPosition
 import com.pranav.drsti.model.TransitHighlight
+import com.pranav.drsti.ui.PreviewSamples
+import com.pranav.drsti.ui.theme.DrshtiTheme
 import com.pranav.drsti.ui.viewmodel.TransitViewModel
 
 @Composable
@@ -119,3 +122,19 @@ private fun TransitContent(
         item { Spacer(Modifier.height(32.dp)) }
     }
 }
+
+@Preview(showBackground = true)
+@Composable
+private fun TransitScreenPreview() {
+    DrshtiTheme {
+        TransitContent(
+            positions = PreviewSamples.planetPositions,
+            highlights = PreviewSamples.transitHighlights,
+            favorable = listOf("New beginnings", "Communication"),
+            caution = listOf("Travel delays"),
+            summary = "The stars are aligning for a productive week of deep focus.",
+            fromCache = false
+        )
+    }
+}
+

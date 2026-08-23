@@ -19,13 +19,16 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pranav.drsti.model.DashaData
 import com.pranav.drsti.model.DashaPeriod
 import com.pranav.drsti.model.KundaliData
 import com.pranav.drsti.model.KundaliPlanet
+import com.pranav.drsti.ui.PreviewSamples
 import com.pranav.drsti.ui.screen.transit.TransitScreen
+import com.pranav.drsti.ui.theme.DrshtiTheme
 import com.pranav.drsti.ui.viewmodel.KundaliViewModel
 import com.pranav.drsti.ui.viewmodel.TransitViewModel
 
@@ -366,3 +369,15 @@ private fun abbreviate(planetName: String): String = when (planetName) {
     "KETU" -> "\u0915\u0947"    // Ke
     else -> planetName.take(2)
 }
+
+@Preview(showBackground = true)
+@Composable
+private fun KundaliScreenPreview() {
+    DrshtiTheme {
+        KundaliContent(
+            kundali = PreviewSamples.kundali,
+            dashaSummary = "Saturn \u203a Mercury"
+        )
+    }
+}
+

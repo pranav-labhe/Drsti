@@ -17,10 +17,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.pranav.drsti.database.entity.DecisionEntity
 import com.pranav.drsti.model.DecisionOptionAnalysis
 import com.pranav.drsti.model.DecisionOptionInput
+import com.pranav.drsti.ui.PreviewSamples
+import com.pranav.drsti.ui.theme.DrshtiTheme
 import com.pranav.drsti.ui.viewmodel.DecisionUiState
 import com.pranav.drsti.ui.viewmodel.DecisionViewModel
 
@@ -86,7 +89,7 @@ private fun DecisionListView(
             }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding).navigationBarsPadding(),
+                modifier = Modifier.fillMaxSize().padding(padding).padding(bottom = 80.dp),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -415,6 +418,35 @@ private fun OutcomeForm(onSubmit: (String, String, String?) -> Unit) {
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Save Outcome")
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun DecisionListViewPreview() {
+    DrshtiTheme {
+        DecisionListView(
+            decisions = listOf(PreviewSamples.decision),
+            onOpen = {},
+            onDelete = {},
+            onNew = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun OptionCardPreview() {
+    DrshtiTheme {
+        Column(Modifier.padding(16.dp)) {
+            OptionCard(
+                option = PreviewSamples.decisionAnalysis.options.first(),
+                isPreferred = true,
+                isSelected = false,
+                canSelect = true,
+                onSelect = {}
+            )
         }
     }
 }
