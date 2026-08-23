@@ -6,8 +6,10 @@
     android:viewportHeight="108">
     <!-- A simple stylised eye / "drsti" (sight) mark -->
     <path
-        android:fillColor="#F5A623"
+        android:strokeColor="#F5A623"
+        android:strokeWidth="1"
         android:pathData="M54,24 L62,58 L54,90 L46,58 Z" />
+
     <path
         android:fillColor="#F5A623"
         android:pathData="M30,52 C40,44 68,44 78,52 L78,56 C68,50 40,50 30,56 Z" />

@@ -8,6 +8,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -16,6 +21,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+
 import com.pranav.drsti.database.DrishtiDatabase
 import com.pranav.drsti.ui.theme.DrshtiTheme
 import com.pranav.drsti.ui.viewmodel.SettingsViewModel
@@ -98,7 +104,9 @@ fun SettingsScreen(
                         )
                     }
                 }
-                
+
+                Spacer(Modifier.height(8.dp))
+
                 Text(
                     when (state.aiMode) {
                         "MOCK" -> "MOCK: Fully offline, zero cost. Uses rule-based Jyotish interpretation."
@@ -108,17 +116,6 @@ fun SettingsScreen(
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(Modifier.height(8.dp))
-                
-                OutlinedTextField(
-                    value = state.aiModel,
-                    onValueChange = viewModel::setAiModel,
-                    label = { Text("Model Identifier") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = ShapeDefaults.Medium
                 )
 
                 if (state.aiMode != "MOCK") {
@@ -177,6 +174,66 @@ fun SettingsScreen(
                             }
                         }
                     }
+                }
+
+                // Model selection: either a free text field or a dropdown when in GEMINI mode
+                if (state.aiMode == "GEMINI") {
+                    Spacer(Modifier.height(16.dp))
+                    // Show dropdown of fetched Gemini models
+                    var expanded by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(
+                        expanded = expanded,
+                        onExpandedChange = { expanded = it },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = state.aiModel,
+                            onValueChange = { },
+                            label = { Text("Gemini Model") },
+                            readOnly = true,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                            modifier = Modifier
+                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                                .fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            // Show loading indicator if models are being fetched
+                            if (state.geminiModelsLoading) {
+                                DropdownMenuItem(
+                                    text = { Text("Loading models…") },
+                                    onClick = { },
+                                    enabled = false
+                                )
+                            } else {
+                                val modelList = state.geminiModelList.ifEmpty {
+                                    listOf("gemini-1.5-flash", "gemini-1.0-pro")
+                                }
+                                modelList.forEach { modelName ->
+                                    DropdownMenuItem(
+                                        text = { Text(modelName) },
+                                        onClick = {
+                                            viewModel.setAiModel(modelName)
+                                            expanded = false
+                                        },
+                                        contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // For MOCK or LIVE, keep the free‑form text field
+                    OutlinedTextField(
+                        value = state.aiModel,
+                        onValueChange = viewModel::setAiModel,
+                        label = { Text("Model Identifier") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = ShapeDefaults.Medium
+                    )
                 }
 
                 state.saveMessage?.let {

@@ -10,6 +10,10 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -815,6 +819,34 @@ class GeminiAiProvider(
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(45, TimeUnit.SECONDS)
         .build()
+
+    /**
+     * Fetch the list of available Gemini models for the provided API key.
+     * Uses the Google Generative Language API endpoint:
+     *   GET https://generativelanguage.googleapis.com/v1beta/models?key=API_KEY
+     * Returns a list of model names (e.g., "gemini-1.5-flash").
+     */
+    suspend fun fetchAvailableModels(): List<String> = withContext(Dispatchers.IO) {
+        val url = "https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey"
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                error("Gemini model list request failed: ${response.code} ${response.message}")
+            }
+            val body = response.body?.string() ?: error("Empty response body for Gemini model list")
+            // Expected JSON: {"models":[{"name":"models/gemini-1.5-flash",...}, ...]}
+            val jsonElement = json.parseToJsonElement(body)
+            val modelsArray = jsonElement.jsonObject["models"]?.jsonArray ?: return@withContext emptyList()
+            modelsArray.mapNotNull { elem ->
+                val name = elem.jsonObject["name"]?.jsonPrimitive?.contentOrNull
+                // Strip the leading "models/" if present
+                name?.removePrefix("models/")
+            }
+        }
+    }
 
     override suspend fun calculatePlanetaryPositions(dateTime: LocalDateTime, zoneId: ZoneId, latitude: Double, longitude: Double) =
         mockFallback.calculatePlanetaryPositions(dateTime, zoneId, latitude, longitude)
