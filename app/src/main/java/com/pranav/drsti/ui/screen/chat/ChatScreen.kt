@@ -236,6 +236,15 @@ private fun EmptyChatPrompt(
                 )
             }
         }
+
+        Spacer(Modifier.height(32.dp))
+        Text(
+            text = "Legal Disclaimer: AI interpretations are for reflection and entertainment only. D\u1e5b\u1e63\u1e6di is an offline-first app. The responsibility for all data shared in this chat and maintained on this device stands wholly with the user, not with us. Be cautious about sharing sensitive secrets, as external AI providers (if enabled) will process your chat content.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
     }
 }
 

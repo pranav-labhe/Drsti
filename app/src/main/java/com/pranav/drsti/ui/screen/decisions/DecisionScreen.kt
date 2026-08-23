@@ -89,7 +89,7 @@ private fun DecisionListView(
             }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding).padding(bottom = 80.dp),
+                modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -121,6 +121,17 @@ private fun DecisionListView(
                             }
                         }
                     }
+                }
+
+                item {
+                    Spacer(Modifier.height(32.dp))
+                    Text(
+                        text = "Vedic decision analysis is an interpretive tool for reflection. It is not a prediction of certainty and does not substitute for professional advice.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp)
+                    )
                 }
             }
         }
