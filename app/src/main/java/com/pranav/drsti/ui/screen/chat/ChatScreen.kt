@@ -197,7 +197,7 @@ private fun EmptyChatPrompt(
         Text("\u0926\u0943\u0937\u094d\u091f\u093f", style = MaterialTheme.typography.headlineLarge)
         Spacer(Modifier.height(16.dp))
         Text(
-            "\"Give me a clearer view of the path; let me make the choice.\"",
+            "\"See beyond the obvious; discover different perspectives.\"",
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -455,7 +455,7 @@ private fun ChatDrawerContent(
     ModalDrawerSheet {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
             Text("D\u1e5b\u1e63\u1e6di", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
-            Text("Personal Vedic Companion", style = MaterialTheme.typography.labelSmall)
+            Text("See beyond the obvious", style = MaterialTheme.typography.labelSmall)
             
             Spacer(Modifier.height(24.dp))
             
