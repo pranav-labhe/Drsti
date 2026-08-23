@@ -7,6 +7,7 @@ import com.pranav.drsti.data.repository.SettingsRepository
 import com.pranav.drsti.database.DrishtiDatabase
 import com.pranav.drsti.di.ServiceLocator
 import com.pranav.drsti.util.SecureCredentialStorage
+import com.pranav.drsti.ai.provider.GeminiAiProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -15,6 +16,10 @@ import kotlinx.coroutines.launch
 data class SettingsUiState(
     val aiMode: String = "MOCK",
     val aiModel: String = "gpt-4o-mini",
+    // List of available Gemini models fetched from the API
+    val geminiModelList: List<String> = emptyList(),
+    // Loading indicator for fetching Gemini models
+    val geminiModelsLoading: Boolean = false,
     val hasApiKey: Boolean = false,
     val apiKey: String = "",
     val hasGeminiApiKey: Boolean = false,
@@ -47,6 +52,11 @@ class SettingsViewModel(
                 planetaryFreshnessMinutes = settingsRepository.getPlanetaryFreshnessMinutes(),
                 diagnosticsEnabled = settingsRepository.getDiagnosticsEnabled()
             )
+            // If Gemini mode is active and we have an API key, fetch the model list
+            val current = _state.value
+            if (current.aiMode == "GEMINI" && current.geminiApiKey.isNotBlank()) {
+                loadGeminiModels(current.geminiApiKey)
+            }
         }
     }
 
@@ -54,6 +64,10 @@ class SettingsViewModel(
         settingsRepository.setAiMode(mode)
         serviceLocator.refreshAiProviderFromSettings()
         _state.value = _state.value.copy(aiMode = mode, saveMessage = "AI mode updated.")
+        // If switched to GEMINI and we have a key, fetch the model list
+        if (mode == "GEMINI" && _state.value.geminiApiKey.isNotBlank()) {
+            loadGeminiModels(_state.value.geminiApiKey)
+        }
     }
 
     fun setAiModel(model: String) = viewModelScope.launch {
@@ -80,6 +94,10 @@ class SettingsViewModel(
             geminiApiKey = key,
             saveMessage = "Gemini API key saved."
         )
+        // After saving the key, fetch the available models
+        if (key.isNotBlank()) {
+            loadGeminiModels(key)
+        }
     }
 
     fun clearMessage() {
@@ -94,6 +112,25 @@ class SettingsViewModel(
     fun setDiagnosticsEnabled(enabled: Boolean) = viewModelScope.launch {
         settingsRepository.setDiagnosticsEnabled(enabled)
         _state.value = _state.value.copy(diagnosticsEnabled = enabled)
+    }
+
+    /** Fetch Gemini model list using the provider and update UI state */
+    private fun loadGeminiModels(apiKey: String) = viewModelScope.launch {
+        // Update loading state
+        _state.update { it.copy(geminiModelsLoading = true) }
+        try {
+            val provider = serviceLocator.aiService.value
+            if (provider is com.pranav.drsti.ai.provider.GeminiAiProvider) {
+                val models = provider.fetchAvailableModels()
+                _state.update { it.copy(geminiModelList = models, geminiModelsLoading = false) }
+            } else {
+                // Not Gemini provider; clear list
+                _state.update { it.copy(geminiModelList = emptyList(), geminiModelsLoading = false) }
+            }
+        } catch (e: Exception) {
+            // On error, clear list and stop loading
+            _state.update { it.copy(geminiModelList = emptyList(), geminiModelsLoading = false) }
+        }
     }
 
     fun clearCache(database: DrishtiDatabase) = viewModelScope.launch {
