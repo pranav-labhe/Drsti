@@ -14,6 +14,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.KSerializer
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -59,6 +60,33 @@ interface AiAstrologyService {
 }
 
 private const val CALC_VERSION = "astrocalc-1.0"
+
+/** Helper to extract and parse JSON from AI responses that might contain markdown or extra text. */
+private fun <T> extractJson(text: String, serializer: KSerializer<T>): T? {
+    val trimmed = text.trim()
+    
+    // 1. Try finding JSON inside triple backticks
+    val tripleBacktickMatch = Regex("```(?:json)?\\s*([\\s\\S]*?)\\s*```").find(trimmed)?.groupValues?.get(1)
+    if (tripleBacktickMatch != null) {
+        runCatching { return json.decodeFromString(serializer, tripleBacktickMatch.trim()) }
+    }
+
+    // 2. Try finding JSON between known tags used in chat
+    val markerMatch = if (trimmed.contains("DECISION_ANALYSIS_START")) {
+        trimmed.substringAfter("DECISION_ANALYSIS_START").substringBefore("DECISION_ANALYSIS_END").trim()
+    } else if (trimmed.contains("JSON_START")) {
+        trimmed.substringAfter("JSON_START").substringBefore("JSON_END").trim()
+    } else null
+    
+    if (markerMatch != null) {
+        runCatching { return json.decodeFromString(serializer, markerMatch) }
+    }
+
+    // 3. Try parsing the whole string as raw JSON
+    runCatching { return json.decodeFromString(serializer, trimmed) }
+
+    return null
+}
 
 // ==================== Panchang & Dasha master data / helpers ====================
 
@@ -574,22 +602,22 @@ class OpenAiProvider(
         mockFallback.generatePanchang(date, zoneId, latitude, longitude)
 
     override suspend fun analyzeTransits(context: AiRequestContext): TransitAnalysisResult {
-        // Falls back to the deterministic engine if the network call fails for any reason —
+        // Falls back to the deterministic engine if the network call fails or parsing fails —
         // the app must never silently fabricate data (spec §44).
         return runCatching { callForInterpretation("transit-v1", context.toString()) }
-            .map { mockFallback.analyzeTransits(context) } // JSON->TransitAnalysisResult wiring left to the caller's schema in a full build
+            .map { output -> extractJson(output, TransitAnalysisResult.serializer()) ?: mockFallback.analyzeTransits(context) }
             .getOrElse { mockFallback.analyzeTransits(context) }
     }
 
     override suspend fun analyzeDecision(context: AiRequestContext, request: DecisionRequest): DecisionAnalysis {
         return runCatching { callForInterpretation("decision-v1", context.toString() + request.toString()) }
-            .map { mockFallback.analyzeDecision(context, request) }
+            .map { output -> extractJson(output, DecisionAnalysis.serializer()) ?: mockFallback.analyzeDecision(context, request) }
             .getOrElse { mockFallback.analyzeDecision(context, request) }
     }
 
     override suspend fun analyzeOutcome(originalAnalysis: DecisionAnalysis, outcome: OutcomeInput): OutcomeAnalysis {
         return runCatching { callForInterpretation("outcome-v1", originalAnalysis.toString() + outcome.toString()) }
-            .map { mockFallback.analyzeOutcome(originalAnalysis, outcome) }
+            .map { output -> extractJson(output, OutcomeAnalysis.serializer()) ?: mockFallback.analyzeOutcome(originalAnalysis, outcome) }
             .getOrElse { mockFallback.analyzeOutcome(originalAnalysis, outcome) }
     }
 
@@ -642,14 +670,9 @@ class OpenAiProvider(
             success = true
 
             // Try to extract a structured decision analysis if the AI included one
-            val decisionAnalysis = if (output.contains("DECISION_ANALYSIS_START")) {
-                runCatching {
-                    val jsonStr = output.substringAfter("DECISION_ANALYSIS_START").substringBefore("DECISION_ANALYSIS_END").trim()
-                    json.decodeFromString(DecisionAnalysis.serializer(), jsonStr)
-                }.getOrNull()
-            } else null
+            val decisionAnalysis = extractJson(output, DecisionAnalysis.serializer())
 
-            val cleanedText = if (decisionAnalysis != null) {
+            val cleanedText = if (decisionAnalysis != null && output.contains("DECISION_ANALYSIS_START")) {
                 output.substringBefore("DECISION_ANALYSIS_START").trim() + "\n\n" + output.substringAfter("DECISION_ANALYSIS_END").trim()
             } else output
 
@@ -748,9 +771,25 @@ class OpenAiProvider(
 
 object SystemPrompts {
     fun forVersion(promptVersion: String): String = when (promptVersion) {
-        "decision-v1" -> "You are D\u1e5b\u1e63\u1e6di's Vedic decision-analysis capability. You receive real, pre-computed astronomical/Jyotish data (never invent positions). Compare the given options using Dasha, transits, and Panchang. Never tell the user what to do \u2014 only present astrological support (0-100 indicators, not probabilities), supporting and contradicting factors, and clearly state the final decision is theirs."
-        "outcome-v1" -> "You are D\u1e5b\u1e63\u1e6di's retrospective Outcome capability. Compare the original immutable analysis against what actually happened. Never rewrite the original analysis. Identify which indicators aligned or didn't, and note calibration learnings."
-        "transit-v1" -> "You are D\u1e5b\u1e63\u1e6di's Transit capability. Analyze the supplied natal chart and current planetary positions. Do not fabricate positions; only interpret what's supplied."
+        "decision-v1" -> """
+            You are D\u1e5b\u1e63\u1e6di's Vedic decision-analysis capability. You receive real, pre-computed astronomical/Jyotish data (never invent positions). 
+            Compare the given options using Dasha, transits, and Panchang. Never tell the user what to do — only present astrological support (0-100 indicators, not probabilities), supporting and contradicting factors, and clearly state the final decision is theirs.
+            
+            Return your analysis as a structured JSON object matching the DecisionAnalysis schema. 
+            Do not include any conversational filler; only return the JSON block.
+        """.trimIndent()
+        "outcome-v1" -> """
+            You are D\u1e5b\u1e63\u1e6di's retrospective Outcome capability. Compare the original immutable analysis against what actually happened. Never rewrite the original analysis. Identify which indicators aligned or didn't, and note calibration learnings.
+            
+            Return your analysis as a structured JSON object matching the OutcomeAnalysis schema.
+            Do not include any conversational filler; only return the JSON block.
+        """.trimIndent()
+        "transit-v1" -> """
+            You are D\u1e5b\u1e63\u1e6di's Transit capability. Analyze the supplied natal chart and current planetary positions. Do not fabricate positions; only interpret what's supplied.
+            
+            Return your analysis as a structured JSON object matching the TransitAnalysisResult schema.
+            Do not include any conversational filler; only return the JSON block.
+        """.trimIndent()
         "chat-v1" -> """
             You are D\u1e5b\u1e63\u1e6di, an intelligent Vedic Jyotish reasoning companion.
             The user speaks normally. D\u1e5b\u1e63\u1e6di understands the Jyotish implications behind the question.
@@ -862,19 +901,19 @@ class GeminiAiProvider(
 
     override suspend fun analyzeTransits(context: AiRequestContext): TransitAnalysisResult {
         return runCatching { callForInterpretation("transit-v1", context.toString()) }
-            .map { mockFallback.analyzeTransits(context) }
+            .map { output -> extractJson(output, TransitAnalysisResult.serializer()) ?: mockFallback.analyzeTransits(context) }
             .getOrElse { mockFallback.analyzeTransits(context) }
     }
 
     override suspend fun analyzeDecision(context: AiRequestContext, request: DecisionRequest): DecisionAnalysis {
         return runCatching { callForInterpretation("decision-v1", context.toString() + request.toString()) }
-            .map { mockFallback.analyzeDecision(context, request) }
+            .map { output -> extractJson(output, DecisionAnalysis.serializer()) ?: mockFallback.analyzeDecision(context, request) }
             .getOrElse { mockFallback.analyzeDecision(context, request) }
     }
 
     override suspend fun analyzeOutcome(originalAnalysis: DecisionAnalysis, outcome: OutcomeInput): OutcomeAnalysis {
         return runCatching { callForInterpretation("outcome-v1", originalAnalysis.toString() + outcome.toString()) }
-            .map { mockFallback.analyzeOutcome(originalAnalysis, outcome) }
+            .map { output -> extractJson(output, OutcomeAnalysis.serializer()) ?: mockFallback.analyzeOutcome(originalAnalysis, outcome) }
             .getOrElse { mockFallback.analyzeOutcome(originalAnalysis, outcome) }
     }
 
@@ -976,14 +1015,9 @@ class GeminiAiProvider(
             success = true
             
             // Try to extract a structured decision analysis
-            val decisionAnalysis = if (output.contains("DECISION_ANALYSIS_START")) {
-                runCatching {
-                    val jsonStr = output.substringAfter("DECISION_ANALYSIS_START").substringBefore("DECISION_ANALYSIS_END").trim()
-                    json.decodeFromString(DecisionAnalysis.serializer(), jsonStr)
-                }.getOrNull()
-            } else null
+            val decisionAnalysis = extractJson(output, DecisionAnalysis.serializer())
 
-            val cleanedText = if (decisionAnalysis != null) {
+            val cleanedText = if (decisionAnalysis != null && output.contains("DECISION_ANALYSIS_START")) {
                 output.substringBefore("DECISION_ANALYSIS_START").trim() + "\n\n" + output.substringAfter("DECISION_ANALYSIS_END").trim()
             } else output
 

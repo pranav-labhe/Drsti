@@ -101,6 +101,15 @@ Compose UI  →  ViewModel  →  Repository / AiAstrologyService  →  Room / As
   astrological reasoning while maintaining a private, local-only conversation
   history.
 
+## AI-Powered Capabilities
+
+When **LIVE** or **GEMINI** mode is enabled, the following screens utilize AI for specialized reasoning (while all calculations remain local):
+
+- **Chat Companion**: General conversational reasoning grounded in your chart data. It can automatically detect when you are describing a choice and trigger a structured decision analysis.
+- **Decision Journal**: Specialized comparison of choices. AI evaluates your Dasha and transits to provide "Astrological Support %" and detailed explanations for each path.
+- **Outcome Calibration**: Retrospective analysis of your recorded decisions. AI compares the original prediction against what actually happened to identify alignment or miscalibration.
+- **Transit Analysis**: Interpretive summary of today's planetary movements. AI identifies favorable themes and caution areas specifically for your natal positions.
+
 ## Privacy
 
 Birth data, chat history, and everything else lives in a local Room
