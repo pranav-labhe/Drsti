@@ -368,7 +368,7 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(32.dp))
             Text(
-                "D\u1e5b\u1e63\u1e6di \u2022 Version 1.0.0\n\u201CGive me a clearer view of the path; let me make the choice.\u201D",
+                "D\u1e5b\u1e63\u1e6di \u2022 Version 1.0.0\n\u201CSee beyond the obvious; discover different perspectives.\u201D",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
