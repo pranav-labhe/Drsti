@@ -1,6 +1,6 @@
 # दृष्टि — Dṛṣṭi
 
-*"See beyond the obvious; discover different perspectives."*
+*"See beyond the obvious; discover different perspectives through hidden clues and deeper signals."*
 
 A private, offline-first Vedic decision companion for Android. Chat is the
 home screen; Kundali, Panchang, and Settings are one tap away.
