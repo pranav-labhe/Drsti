@@ -2,6 +2,7 @@ package com.pranav.drsti.database.entity
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import kotlinx.serialization.Serializable
 
 /*
  * Room entities. Kept in one file to match the requested project layout.
@@ -13,6 +14,7 @@ import androidx.room.PrimaryKey
  */
 
 @Entity(tableName = "person")
+@Serializable
 data class PersonEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
@@ -31,6 +33,7 @@ data class PersonEntity(
 )
 
 @Entity(tableName = "place")
+@Serializable
 data class PlaceEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
@@ -46,6 +49,7 @@ data class PlaceEntity(
 )
 
 @Entity(tableName = "conversation")
+@Serializable
 data class ConversationEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val title: String,
@@ -54,6 +58,7 @@ data class ConversationEntity(
 )
 
 @Entity(tableName = "conversation_message")
+@Serializable
 data class ConversationMessageEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val conversationId: Long,
@@ -65,6 +70,7 @@ data class ConversationMessageEntity(
 )
 
 @Entity(tableName = "kundali")
+@Serializable
 data class KundaliEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val personId: Long,
@@ -74,6 +80,7 @@ data class KundaliEntity(
 )
 
 @Entity(tableName = "dasha")
+@Serializable
 data class DashaEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val personId: Long,
@@ -83,6 +90,7 @@ data class DashaEntity(
 )
 
 @Entity(tableName = "panchang")
+@Serializable
 data class PanchangEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val cacheKey: String, // date+lat+lon+tz+systemVersion+calcVersion
@@ -94,6 +102,7 @@ data class PanchangEntity(
 )
 
 @Entity(tableName = "planetary_position")
+@Serializable
 data class PlanetaryPositionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val timestampUtc: String,
@@ -104,6 +113,7 @@ data class PlanetaryPositionEntity(
 )
 
 @Entity(tableName = "transit_analysis")
+@Serializable
 data class TransitAnalysisEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val personId: Long,
@@ -112,6 +122,7 @@ data class TransitAnalysisEntity(
 )
 
 @Entity(tableName = "decision")
+@Serializable
 data class DecisionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val personId: Long,
@@ -128,6 +139,7 @@ data class DecisionEntity(
 
 /** Immutable pre-decision analysis snapshot. Never updated after creation (spec §33). */
 @Entity(tableName = "decision_analysis")
+@Serializable
 data class DecisionAnalysisEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val decisionId: Long,
@@ -144,6 +156,7 @@ data class DecisionAnalysisEntity(
 )
 
 @Entity(tableName = "decision_outcome")
+@Serializable
 data class DecisionOutcomeEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val decisionId: Long,
@@ -156,6 +169,7 @@ data class DecisionOutcomeEntity(
 )
 
 @Entity(tableName = "outcome_analysis")
+@Serializable
 data class OutcomeAnalysisEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val decisionId: Long,
@@ -164,6 +178,7 @@ data class OutcomeAnalysisEntity(
 )
 
 @Entity(tableName = "ai_request_log")
+@Serializable
 data class AIRequestLogEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val conversationId: Long? = null,
@@ -181,7 +196,9 @@ data class AIRequestLogEntity(
 )
 
 @Entity(tableName = "app_settings")
+@Serializable
 data class AppSettingsEntity(
     @PrimaryKey val key: String,
     val value: String
 )
+

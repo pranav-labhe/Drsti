@@ -75,6 +75,24 @@ fun HomeScreen(
             { serviceLocator.aiService.value }
         )
     )
+    
+    val onAskDrishti: (String) -> Unit = { prompt ->
+        val title = when {
+            prompt.contains("Panchang", ignoreCase = true) -> "Panchang Insight"
+            prompt.contains("Dasha", ignoreCase = true) -> "Dasha Analysis"
+            prompt.contains("chart", ignoreCase = true) -> "Chart Analysis"
+            else -> "Insight"
+        }
+        // 1. Navigate first to ensure UI is ready
+        navController.navigate(HomeTab.Chat.route) {
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+        // 2. Trigger the prompt after navigation is initiated
+        chatViewModel.onSharedPrompt(prompt, title)
+    }
+
     val kundaliViewModel: KundaliViewModel = viewModel(
         factory = KundaliViewModel.factory(
             serviceLocator.personRepository, serviceLocator.database.kundaliDao(), serviceLocator.database.dashaDao()
@@ -121,7 +139,7 @@ fun HomeScreen(
                             navController.navigate(tab.route) {
                                 popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                                 launchSingleTop = true
-                                restoreState = false
+                                restoreState = true
                             }
                         },
                         icon = { Icon(tab.icon, contentDescription = tab.label) },
@@ -151,9 +169,11 @@ fun HomeScreen(
             }
             composable(HomeTab.Decisions.route) { DecisionScreen(decisionViewModel) }
             composable(HomeTab.Kundali.route) { 
-                KundaliScreen(kundaliViewModel, transitViewModel) 
+                KundaliScreen(kundaliViewModel, transitViewModel, onAskDrishti = onAskDrishti) 
             }
-            composable(HomeTab.Panchang.route) { PanchangScreen(panchangViewModel) }
+            composable(HomeTab.Panchang.route) { 
+                PanchangScreen(panchangViewModel, onAskDrishti = onAskDrishti) 
+            }
             composable(HomeTab.Settings.route) {
                 SettingsScreen(
                     viewModel = settingsViewModel,

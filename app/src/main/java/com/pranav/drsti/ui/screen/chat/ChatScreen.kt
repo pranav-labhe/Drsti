@@ -1,5 +1,7 @@
 package com.pranav.drsti.ui.screen.chat
 
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,7 +18,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -383,18 +388,141 @@ private fun renderInlineMarkdown(text: String): androidx.compose.ui.text.Annotat
 }
 
 @Composable
+fun BlinkingDrishtiIcon(modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "blinking")
+    
+    // Pulse alpha for "thinking" state
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "alpha"
+    )
+
+    // Periodic blink effect (flattening the eye shape)
+    val blinkScaleY by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = 3500
+                1f at 0
+                1f at 3200
+                0.05f at 3350 // Fast close
+                1f at 3500 // Open
+            },
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "blink"
+    )
+
+    // Horizontal scanning movement for the diamond
+    val diamondScanX by infiniteTransition.animateFloat(
+        initialValue = -20f,
+        targetValue = 20f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1700, easing = EaseInOutSine),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scan"
+    )
+
+    val primaryColor = MaterialTheme.colorScheme.primary
+
+    Canvas(modifier = modifier.alpha(alpha)) {
+        val w = size.width
+        val h = size.height
+        val s = w / 108f
+        val centerYOffset = (h - (108f * s)) / 2f
+        val centerXOffset = (w - (108f * s)) / 2f
+
+        // 1. The Logo Eye Shape (Outline)
+        val eyeCenterY = 52f * s + centerYOffset
+        val eyePath = androidx.compose.ui.graphics.Path().apply {
+            moveTo(30f * s + centerXOffset, eyeCenterY)
+            cubicTo(
+                40f * s + centerXOffset, (52f - (52f - 44f) * blinkScaleY) * s + centerYOffset,
+                68f * s + centerXOffset, (52f - (52f - 44f) * blinkScaleY) * s + centerYOffset,
+                78f * s + centerXOffset, eyeCenterY
+            )
+            lineTo(78f * s + centerXOffset, (52f + (56f - 52f) * blinkScaleY) * s + centerYOffset)
+            cubicTo(
+                68f * s + centerXOffset, (52f + (52f - 50f) * blinkScaleY) * s + centerYOffset,
+                40f * s + centerXOffset, (52f + (52f - 50f) * blinkScaleY) * s + centerYOffset,
+                30f * s + centerXOffset, (52f + (56f - 52f) * blinkScaleY) * s + centerYOffset
+            )
+            close()
+        }
+        drawPath(path = eyePath, color = primaryColor.copy(alpha = 0.4f))
+        
+        // 2. The Logo Pupil
+        if (blinkScaleY > 0.3f) {
+            drawCircle(
+                color = primaryColor.copy(alpha = 0.7f),
+                radius = 7f * s * blinkScaleY,
+                center = Offset(48f * s + centerXOffset, 58f * s + centerYOffset)
+            )
+        }
+
+        // 3. The Scanning Focus Diamond (Moving horizontally)
+        val dx = diamondScanX * s
+        val diamondPath = androidx.compose.ui.graphics.Path().apply {
+            // Main diamond body
+            moveTo((54f + dx) * s + centerXOffset, 24f * s + centerYOffset)
+            lineTo((62f + dx) * s + centerXOffset, 58f * s + centerYOffset)
+            lineTo((54f + dx) * s + centerXOffset, 90f * s + centerYOffset)
+            lineTo((46f + dx) * s + centerXOffset, 58f * s + centerYOffset)
+            close()
+
+            // Top corner detail
+            moveTo((54f + dx) * s + centerXOffset, 24f * s + centerYOffset)
+            lineTo((56f + dx) * s + centerXOffset, 30f * s + centerYOffset)
+            lineTo((54f + dx) * s + centerXOffset, 33f * s + centerYOffset)
+            lineTo((52f + dx) * s + centerXOffset, 30f * s + centerYOffset)
+            close()
+
+            // Bottom corner detail
+            moveTo((54f + dx) * s + centerXOffset, 90f * s + centerYOffset)
+            lineTo((56f + dx) * s + centerXOffset, 84f * s + centerYOffset)
+            lineTo((54f + dx) * s + centerXOffset, 81f * s + centerYOffset)
+            lineTo((52f + dx) * s + centerXOffset, 84f * s + centerYOffset)
+            close()
+        }
+        
+        drawPath(
+            path = diamondPath,
+            color = primaryColor,
+            style = Stroke(width = 2f * s)
+        )
+    }
+}
+
+@Composable
 private fun TypingIndicator() {
-    Row(modifier = Modifier.padding(start = 8.dp, top = 4.dp)) {
+    Row(
+        modifier = Modifier.padding(start = 8.dp, top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Surface(
             color = MaterialTheme.colorScheme.surfaceVariant,
             shape = RoundedCornerShape(16.dp),
             tonalElevation = 1.dp
         ) {
-            Text(
-                "D\u1e5b\u1e63\u1e6di is thinking\u2026",
+            Row(
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                style = MaterialTheme.typography.labelSmall
-            )
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Increased size from 16.dp to 24.dp to match visual weight of the text
+                BlinkingDrishtiIcon(modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "D\u1e5b\u1e63\u1e6di is looking beyond\u2026",
+                    style = MaterialTheme.typography.labelSmall // Slightly larger typography for balance
+                )
+            }
         }
     }
 }

@@ -1,5 +1,7 @@
 package com.pranav.drsti.ui.screen.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -22,6 +24,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -305,6 +309,36 @@ fun SettingsScreen(
             }
 
             SettingsGroup(title = "Diagnostics & Privacy") {
+                val coroutineScope = rememberCoroutineScope()
+                val context = LocalContext.current
+                
+                // Activity launchers for backup/restore
+                val createDocumentLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.CreateDocument("application/json")
+                ) { uri ->
+                    uri?.let {
+                        coroutineScope.launch {
+                            val jsonStr = viewModel.exportBackup()
+                            context.contentResolver.openOutputStream(it)?.use { os ->
+                                os.write(jsonStr.toByteArray())
+                            }
+                        }
+                    }
+                }
+
+                val openDocumentLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenDocument()
+                ) { uri ->
+                    uri?.let {
+                        coroutineScope.launch {
+                            context.contentResolver.openInputStream(it)?.use { isStream ->
+                                val jsonStr = isStream.bufferedReader().readText()
+                                viewModel.importBackup(jsonStr)
+                            }
+                        }
+                    }
+                }
+
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Planetary Freshness", style = MaterialTheme.typography.bodyLarge)
@@ -338,7 +372,18 @@ fun SettingsScreen(
                 OutlinedListItem(
                     headline = "Export/Backup Data",
                     supporting = "Download your local database as a backup file",
-                    onClick = { /* Placeholder for §49 file export logic */ }
+                    onClick = { createDocumentLauncher.launch("drishti_backup.json") }
+                )
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+
+                OutlinedListItem(
+                    headline = "Restore Backup",
+                    supporting = "Upload a previously saved backup file",
+                    onClick = { openDocumentLauncher.launch(arrayOf("application/json")) }
                 )
 
                 HorizontalDivider(
@@ -455,6 +500,7 @@ fun ClipboardAutoPasteEffect(
     onKeyDetected: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val clipboardManager = remember { context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager }
     val coroutineScope = rememberCoroutineScope()
@@ -481,6 +527,7 @@ fun ClipboardAutoPasteEffect(
                                 val detectedKey = match.value
                                 if (detectedKey != lastProcessedValue || isFieldEmpty) {
                                     lastProcessedValue = detectedKey
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     onKeyDetected(detectedKey)
                                 }
                             }

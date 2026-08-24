@@ -10,6 +10,22 @@ import kotlinx.serialization.Serializable
  * OUTPUT (interpretation, decision analysis) — see spec §61.
  */
 
+import com.pranav.drsti.database.entity.*
+
+@Serializable
+data class BackupData(
+    val version: Int = 1,
+    val people: List<PersonEntity> = emptyList(),
+    val places: List<PlaceEntity> = emptyList(),
+    val settings: List<AppSettingsEntity> = emptyList(),
+    val conversations: List<ConversationEntity> = emptyList(),
+    val messages: List<ConversationMessageEntity> = emptyList(),
+    val decisions: List<DecisionEntity> = emptyList(),
+    val decisionAnalyses: List<DecisionAnalysisEntity> = emptyList(),
+    val decisionOutcomes: List<DecisionOutcomeEntity> = emptyList(),
+    val outcomeAnalyses: List<OutcomeAnalysisEntity> = emptyList()
+)
+
 // ---------- Astrology system configuration (spec §13) ----------
 
 @Serializable

@@ -36,7 +36,7 @@ private val DarkColors = darkColorScheme(
 @Composable
 fun DrshtiTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false, // off by default — Dṛṣṭi has an intentional palette, not a generic dynamic one
+    dynamicColor: Boolean = true, // enabled for Material You polishing
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
