@@ -19,6 +19,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import com.pranav.drsti.database.entity.DecisionEntity
 import com.pranav.drsti.model.DecisionOptionAnalysis
 import com.pranav.drsti.model.DecisionOptionInput
@@ -36,6 +38,15 @@ import com.pranav.drsti.ui.viewmodel.DecisionViewModel
 fun DecisionScreen(viewModel: DecisionViewModel, modifier: Modifier = Modifier) {
     val state by viewModel.state.collectAsState()
     var showNewDecision by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
+
+    LaunchedEffect(state.isBusy) {
+        if (!state.isBusy && !state.error.isNullOrBlank()) {
+            // Optional: short buzz for error?
+        } else if (!state.isBusy && state.selectedDetail != null) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         when {

@@ -8,10 +8,13 @@ import com.pranav.drsti.database.DrishtiDatabase
 import com.pranav.drsti.di.ServiceLocator
 import com.pranav.drsti.util.SecureCredentialStorage
 import com.pranav.drsti.ai.provider.GeminiAiProvider
+import com.pranav.drsti.model.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 data class SettingsUiState(
     val aiMode: String = "MOCK",
@@ -112,6 +115,43 @@ class SettingsViewModel(
     fun setDiagnosticsEnabled(enabled: Boolean) = viewModelScope.launch {
         settingsRepository.setDiagnosticsEnabled(enabled)
         _state.value = _state.value.copy(diagnosticsEnabled = enabled)
+    }
+
+    suspend fun exportBackup(): String {
+        val data = BackupData(
+            people = serviceLocator.database.personDao().getAll(),
+            places = serviceLocator.database.placeDao().getAll(),
+            settings = serviceLocator.database.appSettingsDao().getAll(),
+            conversations = serviceLocator.database.conversationDao().getAll(),
+            messages = serviceLocator.database.conversationMessageDao().getAll(),
+            decisions = serviceLocator.database.decisionDao().getAll(),
+            decisionAnalyses = serviceLocator.database.decisionAnalysisDao().getAll(),
+            decisionOutcomes = serviceLocator.database.decisionOutcomeDao().getAll(),
+            outcomeAnalyses = serviceLocator.database.outcomeAnalysisDao().getAll()
+        )
+        return Json.encodeToString(data)
+    }
+
+    fun importBackup(jsonStr: String) = viewModelScope.launch {
+        try {
+            val data = Json.decodeFromString<BackupData>(jsonStr)
+            serviceLocator.database.runInTransaction {
+                viewModelScope.launch {
+                    if (data.people.isNotEmpty()) serviceLocator.database.personDao().insertAll(data.people) // Need insertAll in PersonDao
+                    if (data.places.isNotEmpty()) serviceLocator.database.placeDao().insertAll(data.places)
+                    if (data.settings.isNotEmpty()) serviceLocator.database.appSettingsDao().insertAll(data.settings)
+                    if (data.conversations.isNotEmpty()) serviceLocator.database.conversationDao().insertAll(data.conversations)
+                    if (data.messages.isNotEmpty()) serviceLocator.database.conversationMessageDao().insertAll(data.messages)
+                    if (data.decisions.isNotEmpty()) serviceLocator.database.decisionDao().insertAll(data.decisions)
+                    if (data.decisionAnalyses.isNotEmpty()) serviceLocator.database.decisionAnalysisDao().insertAll(data.decisionAnalyses)
+                    if (data.decisionOutcomes.isNotEmpty()) serviceLocator.database.decisionOutcomeDao().insertAll(data.decisionOutcomes)
+                    if (data.outcomeAnalyses.isNotEmpty()) serviceLocator.database.outcomeAnalysisDao().insertAll(data.outcomeAnalyses)
+                    _state.update { it.copy(saveMessage = "Backup restored successfully.") }
+                }
+            }
+        } catch (e: Exception) {
+            _state.update { it.copy(saveMessage = "Restore failed: ${e.message}") }
+        }
     }
 
     /** Fetch Gemini model list using the provider and update UI state */

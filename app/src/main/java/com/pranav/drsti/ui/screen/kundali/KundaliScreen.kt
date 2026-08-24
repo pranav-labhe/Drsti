@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
@@ -38,6 +39,7 @@ import com.pranav.drsti.ui.viewmodel.TransitViewModel
 fun KundaliScreen(
     viewModel: KundaliViewModel,
     transitViewModel: TransitViewModel,
+    onAskDrishti: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.state.collectAsState()
@@ -74,8 +76,8 @@ fun KundaliScreen(
                     when (selectedTab) {
                         0 -> KundaliContent(state.kundali!!, dashaSummary = state.dasha?.let {
                             "${it.currentMahadasha?.planet?.displayName()} \u203a ${it.currentAntardasha?.planet?.displayName()}"
-                        })
-                        1 -> DashaTimelineView(state.dasha)
+                        }, onAskDrishti = onAskDrishti)
+                        1 -> DashaTimelineView(state.dasha, onAskDrishti = onAskDrishti)
                         2 -> TransitScreen(transitViewModel)
                     }
                 }
@@ -92,23 +94,30 @@ private fun EmptyState(text: String) {
 }
 
 @Composable
-private fun KundaliContent(kundali: KundaliData, dashaSummary: String?) {
+private fun KundaliContent(kundali: KundaliData, dashaSummary: String?, onAskDrishti: (String) -> Unit) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Text(
-                "Lagna Kundali (Birth Chart)",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Text(
-                "Ascendant: ${kundali.ascendant.sign.displayName} \u2022 ${kundali.ascendant.nakshatra.displayName} pada ${kundali.ascendant.pada}",
-                style = MaterialTheme.typography.bodyMedium
-            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Lagna Kundali (Birth Chart)",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        "Ascendant: ${kundali.ascendant.sign.displayName} \u2022 ${kundali.ascendant.nakshatra.displayName} pada ${kundali.ascendant.pada}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                IconButton(onClick = { onAskDrishti("Analyze my birth chart and current Dasha: $dashaSummary") }) {
+                    Icon(Icons.Default.AutoFixHigh, contentDescription = "Ask D\u1e5b\u1e63\u1e6di", tint = MaterialTheme.colorScheme.primary)
+                }
+            }
             dashaSummary?.let {
                 Spacer(Modifier.height(4.dp))
                 Text(it, style = MaterialTheme.typography.bodySmall)
@@ -286,7 +295,7 @@ private fun NorthIndianChart(
 }
 
 @Composable
-private fun DashaTimelineView(dasha: DashaData?) {
+private fun DashaTimelineView(dasha: DashaData?, onAskDrishti: (String) -> Unit) {
     if (dasha == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("Dasha periods not calculated.", style = MaterialTheme.typography.bodyMedium)
@@ -300,12 +309,17 @@ private fun DashaTimelineView(dasha: DashaData?) {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
-            Text(
-                "Vimshottari Dasha Timeline",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Vimshottari Dasha Timeline",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                IconButton(onClick = { onAskDrishti("Explain my current Mahadasha: ${dasha.currentMahadasha?.planet?.displayName()} and Antardasha: ${dasha.currentAntardasha?.planet?.displayName()}") }) {
+                    Icon(Icons.Default.AutoFixHigh, contentDescription = "Ask D\u1e5b\u1e63\u1e6di", tint = MaterialTheme.colorScheme.primary)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
         }
 
         items(dasha.mahadashas) { period ->
@@ -376,7 +390,8 @@ private fun KundaliScreenPreview() {
     DrshtiTheme {
         KundaliContent(
             kundali = PreviewSamples.kundali,
-            dashaSummary = "Saturn \u203a Mercury"
+            dashaSummary = "Saturn \u203a Mercury",
+            onAskDrishti = {}
         )
     }
 }

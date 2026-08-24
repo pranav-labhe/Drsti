@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,7 +24,11 @@ import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PanchangScreen(viewModel: PanchangViewModel, modifier: Modifier = Modifier) {
+fun PanchangScreen(
+    viewModel: PanchangViewModel, 
+    onAskDrishti: (String) -> Unit = {},
+    modifier: Modifier = Modifier
+) {
     val state by viewModel.state.collectAsState()
 
     Scaffold(
@@ -31,6 +36,14 @@ fun PanchangScreen(viewModel: PanchangViewModel, modifier: Modifier = Modifier) 
             TopAppBar(
                 title = { Text("Panchang", fontWeight = FontWeight.Bold) },
                 actions = {
+                    IconButton(onClick = { 
+                        val p = state.panchang
+                        if (p != null) {
+                            onAskDrishti("Analyze today's Panchang: ${p.tithiName} tithi, ${p.nakshatra.displayName} nakshatra, ${p.yogaName} yoga.")
+                        }
+                    }) { 
+                        Icon(Icons.Default.AutoFixHigh, contentDescription = "Ask D\u1e5b\u1e63\u1e6di", tint = MaterialTheme.colorScheme.primary) 
+                    }
                     IconButton(onClick = { viewModel.refresh() }) { Icon(Icons.Default.Refresh, contentDescription = "Regenerate") }
                 }
             )

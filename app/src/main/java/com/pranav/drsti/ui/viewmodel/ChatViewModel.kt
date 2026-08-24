@@ -104,7 +104,10 @@ class ChatViewModel(
         // Load default conversation
         viewModelScope.launch {
             val conversation = chatRepository.getOrCreateDefaultConversation()
-            _state.update { it.copy(conversationId = conversation.id) }
+            // Only set if not already set by a deep-link/shared prompt
+            _state.update { 
+                if (it.conversationId == null) it.copy(conversationId = conversation.id) else it 
+            }
         }
 
         // Observe messages for the current conversation
@@ -158,6 +161,23 @@ class ChatViewModel(
     fun selectConversation(conversationId: String) {
         conversationId.toLongOrNull()?.let { id ->
             _state.update { it.copy(conversationId = id) }
+        }
+    }
+
+    /** Handle deep-linked or shared prompt from other screens. */
+    fun onSharedPrompt(text: String, title: String = "Insight") {
+        viewModelScope.launch {
+            // 1. Create the new conversation synchronously
+            val now = java.time.Instant.now().toString()
+            val newId = chatRepository.createConversation(
+                ConversationEntity(title = title, createdAt = now, updatedAt = now)
+            )
+            
+            // 2. Clear state and lock in the new ID
+            _state.update { it.copy(conversationId = newId, messages = emptyList()) }
+            
+            // 3. Trigger the message flow (sendMessage will use the newId from state)
+            sendMessage(text)
         }
     }
 

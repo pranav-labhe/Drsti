@@ -23,11 +23,17 @@ interface PersonDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: PersonEntity): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(entities: List<PersonEntity>)
+
     @Query("UPDATE person SET isActive = 0")
     suspend fun clearActiveFlag()
 
     @Query("UPDATE person SET isActive = 1 WHERE id = :id")
     suspend fun setActive(id: Long)
+
+    @Query("SELECT * FROM person")
+    suspend fun getAll(): List<PersonEntity>
 
     @Delete
     suspend fun delete(entity: PersonEntity)
@@ -57,6 +63,9 @@ interface PlaceDao {
 
     @Query("SELECT COUNT(*) FROM place")
     suspend fun count(): Int
+
+    @Query("SELECT * FROM place")
+    suspend fun getAll(): List<PlaceEntity>
 }
 
 @Dao
@@ -67,8 +76,14 @@ interface ConversationDao {
     @Query("SELECT * FROM conversation WHERE id = :id")
     suspend fun getById(id: Long): ConversationEntity?
 
+    @Query("SELECT * FROM conversation")
+    suspend fun getAll(): List<ConversationEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: ConversationEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(entities: List<ConversationEntity>)
 
     @Update
     suspend fun update(entity: ConversationEntity)
@@ -91,8 +106,14 @@ interface ConversationMessageDao {
         ORDER BY id DESC LIMIT :limit""")
     fun observeRecent(conversationId: Long, limit: Int): Flow<List<ConversationMessageEntity>>
 
+    @Query("SELECT * FROM conversation_message")
+    suspend fun getAll(): List<ConversationMessageEntity>
+
     @Insert
     suspend fun insert(entity: ConversationMessageEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(entities: List<ConversationMessageEntity>)
 
     @Query("SELECT COUNT(*) FROM conversation_message WHERE conversationId = :conversationId")
     suspend fun countForConversation(conversationId: Long): Int
@@ -181,6 +202,12 @@ interface DecisionDao {
     @Query("SELECT * FROM decision WHERE id = :id")
     suspend fun getById(id: Long): DecisionEntity?
 
+    @Query("SELECT * FROM decision")
+    suspend fun getAll(): List<DecisionEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(entities: List<DecisionEntity>)
+
     @Insert
     suspend fun insert(entity: DecisionEntity): Long
 
@@ -200,6 +227,12 @@ interface DecisionAnalysisDao {
     @Query("SELECT * FROM decision_analysis WHERE decisionId = :decisionId ORDER BY analysisTimestamp DESC LIMIT 1")
     suspend fun getLatestForDecision(decisionId: Long): DecisionAnalysisEntity?
 
+    @Query("SELECT * FROM decision_analysis")
+    suspend fun getAll(): List<DecisionAnalysisEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(entities: List<DecisionAnalysisEntity>)
+
     @Insert
     suspend fun insert(entity: DecisionAnalysisEntity): Long
 
@@ -211,6 +244,12 @@ interface DecisionAnalysisDao {
 interface DecisionOutcomeDao {
     @Query("SELECT * FROM decision_outcome WHERE decisionId = :decisionId LIMIT 1")
     suspend fun getForDecision(decisionId: Long): DecisionOutcomeEntity?
+
+    @Query("SELECT * FROM decision_outcome")
+    suspend fun getAll(): List<DecisionOutcomeEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(entities: List<DecisionOutcomeEntity>)
 
     @Insert
     suspend fun insert(entity: DecisionOutcomeEntity): Long
@@ -224,6 +263,12 @@ interface OutcomeAnalysisDao {
     @Query("SELECT * FROM outcome_analysis WHERE decisionId = :decisionId ORDER BY generatedAt DESC LIMIT 1")
     suspend fun getForDecision(decisionId: Long): OutcomeAnalysisEntity?
 
+    @Query("SELECT * FROM outcome_analysis")
+    suspend fun getAll(): List<OutcomeAnalysisEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(entities: List<OutcomeAnalysisEntity>)
+
     @Insert
     suspend fun insert(entity: OutcomeAnalysisEntity): Long
 
@@ -236,8 +281,14 @@ interface AIRequestLogDao {
     @Insert
     suspend fun insert(entity: AIRequestLogEntity): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(entities: List<AIRequestLogEntity>)
+
     @Query("SELECT * FROM ai_request_log ORDER BY id DESC LIMIT :limit")
     fun observeRecent(limit: Int = 50): Flow<List<AIRequestLogEntity>>
+
+    @Query("SELECT * FROM ai_request_log")
+    suspend fun getAll(): List<AIRequestLogEntity>
 
     @Query("DELETE FROM ai_request_log")
     suspend fun clearAll()
@@ -253,6 +304,12 @@ interface AppSettingsDao {
 
     @Query("SELECT * FROM app_settings")
     fun observeAll(): Flow<List<AppSettingsEntity>>
+
+    @Query("SELECT * FROM app_settings")
+    suspend fun getAll(): List<AppSettingsEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(entities: List<AppSettingsEntity>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: AppSettingsEntity)

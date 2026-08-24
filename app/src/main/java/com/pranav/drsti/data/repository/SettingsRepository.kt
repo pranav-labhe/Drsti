@@ -26,7 +26,8 @@ class SettingsRepository(private val dao: AppSettingsDao) {
     suspend fun setDiagnosticsEnabled(enabled: Boolean) = set(KEY_DIAGNOSTICS_ENABLED, enabled.toString())
 
     suspend fun getActivePersonId(): Long? = get(KEY_ACTIVE_PERSON_ID, "").toLongOrNull()
-    suspend fun setActivePersonId(id: Long) = set(KEY_ACTIVE_PERSON_ID, id.toString())
+    val onboardingCompleted: Flow<Boolean> = observeAll().map { it[KEY_ONBOARDING_COMPLETED].toBoolean() }
+    suspend fun setOnboardingCompleted(completed: Boolean) = set(KEY_ONBOARDING_COMPLETED, completed.toString())
 
     companion object {
         const val KEY_AI_MODE = "ai_mode"
@@ -34,5 +35,6 @@ class SettingsRepository(private val dao: AppSettingsDao) {
         const val KEY_PLANETARY_FRESHNESS_MIN = "planetary_freshness_min"
         const val KEY_DIAGNOSTICS_ENABLED = "diagnostics_enabled"
         const val KEY_ACTIVE_PERSON_ID = "active_person_id"
+        const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
     }
 }
