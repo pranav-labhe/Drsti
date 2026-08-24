@@ -1,0 +1,50 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="1024dp"
+    android:height="500dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="500">
+
+    <!-- Background -->
+    <path
+        android:fillColor="#1B1035"
+        android:pathData="M0,0h1024v500h-1024z" />
+
+    <!-- Subtle Background Geometry (Simplified for Vector) -->
+    <path
+        android:strokeColor="#F5A623"
+        android:strokeWidth="0.5"
+        android:fillColor="#00000000"
+        android:alpha="0.1"
+        android:pathData="M850,250m-300,0a300,300 0,1 1,600 0a300,300 0,1 1,-600 0" />
+    <path
+        android:strokeColor="#F5A623"
+        android:strokeWidth="0.3"
+        android:alpha="0.1"
+        android:pathData="M0,250 L1024,250" />
+
+    <!-- Logo Group (Centered at 850,250 relative to graphic, scaled up) -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="2.8"
+        android:scaleY="2.8"
+        android:translateX="796"
+        android:translateY="196">
+        <path
+            android:strokeColor="#F5A623"
+            android:strokeWidth="1.5"
+            android:pathData="M54,24 L62,58 L54,90 L46,58 Z" />
+        <path
+            android:fillColor="#F5A623"
+            android:pathData="M54,24 L56,30 L54,33 L52,30 Z" />
+        <path
+            android:fillColor="#F5A623"
+            android:pathData="M54,90 L56,84 L54,81 L52,84 Z" />
+        <path
+            android:fillColor="#F5A623"
+            android:pathData="M30,52 C40,44 68,44 78,52 L78,56 C68,50 40,50 30,56 Z" />
+        <path
+            android:fillColor="#F5A623"
+            android:pathData="M48,58 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0" />
+    </group>
+</vector>
