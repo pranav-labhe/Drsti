@@ -1,0 +1,14 @@
+<svg width="512" height="512" viewBox="0 0 108 108" xmlns="http://www.w3.org/2000/svg">
+  <!-- Square Background -->
+  <rect width="108" height="108" fill="#1B1035"/>
+  <!-- Focus Diamond Outline -->
+  <path d="M54,24 L62,58 L54,90 L46,58 Z" stroke="#F5A623" stroke-width="1.2" fill="none"/>
+  <!-- Top Corner -->
+  <path d="M54,24 L56,30 L54,33 L52,30 Z" fill="#F5A623"/>
+  <!-- Bottom Corner -->
+  <path d="M54,90 L56,84 L54,81 L52,84 Z" fill="#F5A623"/>
+  <!-- Curved Lids -->
+  <path d="M30,52 C40,44 68,44 78,52 L78,56 C68,50 40,50 30,56 Z" fill="#F5A623"/>
+  <!-- Pupil -->
+  <circle cx="48" cy="58" r="7" fill="#F5A623"/>
+</svg>
