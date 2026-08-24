@@ -33,17 +33,17 @@ fun OnboardingScreen(
     val pages = listOf(
         OnboardingPage(
             title = "See beyond the obvious",
-            description = "D\u1e5b\u1e63\u1e6di helps you discover different perspectives using Vedic Jyotish as an underlying reasoning lens.",
+            description = "D\u1e5b\u1e63\u1e6di helps you uncover different perspectives through hidden clues and deeper signals as an underlying reasoning lens.",
             icon = Icons.Default.AutoFixHigh
         ),
         OnboardingPage(
             title = "Private & Permanent",
-            description = "Your birth details and chat history are stored ONLY on your device. We never see your data.",
+            description = "Your birth details and chat history are stored ONLY on your device. Only your selected AI receives an abstract glimpse of indicators.",
             icon = Icons.Default.Security
         ),
         OnboardingPage(
             title = "Power your Insight",
-            description = "Use your own Gemini API key for high-performance analysis with zero subscription costs.",
+            description = "Use your own AI API key for high-performance analysis. AI provider costs are not in the equation.",
             icon = Icons.Default.Key
         )
     )
