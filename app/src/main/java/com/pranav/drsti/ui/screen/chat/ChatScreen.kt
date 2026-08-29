@@ -1,5 +1,7 @@
 package com.pranav.drsti.ui.screen.chat
 
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
@@ -35,10 +37,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pranav.drsti.database.entity.ConversationMessageEntity
 import com.pranav.drsti.model.Conversation
+import com.pranav.drsti.model.DecisionAnalysis
+import com.pranav.drsti.model.DecisionOptionAnalysis
+import com.pranav.drsti.model.Provenance
 import com.pranav.drsti.ui.PreviewSamples
 import com.pranav.drsti.ui.theme.DrshtiTheme
 import com.pranav.drsti.ui.viewmodel.ChatViewModel
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -278,14 +284,390 @@ fun ChatBubble(message: ConversationMessageEntity) {
                     style = MaterialTheme.typography.bodyMedium
                 )
             } else {
-                MarkdownText(
-                    message.content,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium
+                val content = message.content
+                
+                // Check for markers with or without quotes
+                val markers = listOf(
+                    "DECISION_ANALYSIS_START" to "DECISION_ANALYSIS_END",
+                    "\"DECISION_ANALYSIS_START\"" to "\"DECISION_ANALYSIS_END\""
                 )
+                
+                var foundStart = -1
+                var foundEnd = -1
+                var activeStartMarker = ""
+                var activeEndMarker = ""
+
+                for ((start, end) in markers) {
+                    val s = content.indexOf(start)
+                    val e = content.indexOf(end)
+                    if (s != -1 && e != -1 && e > s) {
+                        foundStart = s
+                        foundEnd = e
+                        activeStartMarker = start
+                        activeEndMarker = end
+                        break
+                    }
+                }
+
+                if (foundStart != -1) {
+                    val preText = content.substring(0, foundStart).trim()
+                    var rawJson = content.substring(foundStart + activeStartMarker.length, foundEnd).trim()
+                    val postText = content.substring(foundEnd + activeEndMarker.length).trim()
+
+                    // Sanitize JSON by removing markdown code blocks if present
+                    if (rawJson.startsWith("```")) {
+                        // Remove opening block like ```json or ```
+                        rawJson = rawJson.substringAfter("\n").substringBeforeLast("```").trim()
+                    }
+                    
+                    val analysis = remember(rawJson) {
+                        try {
+                            val element = Json.parseToJsonElement(rawJson).jsonObject
+                            
+                            val optionsList = element["options"]?.jsonArray?.map { opt ->
+                                val o = opt.jsonObject
+                                DecisionOptionAnalysis(
+                                    id = o["id"]?.jsonPrimitive?.content ?: "",
+                                    astrologicalSupport = o["astrologicalSupport"]?.jsonPrimitive?.intOrNull 
+                                        ?: o["astrological_support"]?.jsonPrimitive?.intOrNull 
+                                        ?: o["astrologicalScore"]?.jsonPrimitive?.intOrNull ?: -1,
+                                    timingSupport = o["timingSupport"]?.jsonPrimitive?.intOrNull 
+                                        ?: o["timing_support"]?.jsonPrimitive?.intOrNull 
+                                        ?: o["timingScore"]?.jsonPrimitive?.intOrNull ?: -1,
+                                    strength = o["strength"]?.jsonPrimitive?.content 
+                                        ?: o["result"]?.jsonPrimitive?.content ?: "moderate",
+                                    explanation = o["explanation"]?.jsonPrimitive?.content ?: "",
+                                    strengths = o["strengths"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+                                    concerns = o["concerns"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+                                    supportingFactors = o["supportingFactors"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+                                    contradictingFactors = o["contradictingFactors"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
+                                )
+                            } ?: emptyList()
+
+                            DecisionAnalysis(
+                                analysisSummary = element["summary"]?.jsonPrimitive?.content 
+                                    ?: element["analysisSummary"]?.jsonPrimitive?.content ?: "",
+                                options = optionsList,
+                                preferredOptionId = element["preferredOptionId"]?.jsonPrimitive?.content 
+                                    ?: element["preferred_option_id"]?.jsonPrimitive?.content,
+                                confidence = element["confidence"]?.jsonPrimitive?.let { 
+                                    val content = it.content
+                                    val doubleVal = it.doubleOrNull
+                                    if (doubleVal != null && doubleVal > 0 && doubleVal <= 1.0) {
+                                        "${(doubleVal * 100).toInt()}%"
+                                    } else {
+                                        content
+                                    }
+                                } ?: "medium",
+                                provenance = Provenance(
+                                    calculationVersion = "1.0",
+                                    generatedAt = java.time.Instant.now().toString(),
+                                    source = "AI",
+                                    sourceVersion = "1.0",
+                                    inputHash = "",
+                                    outputHash = ""
+                                )
+                            )
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+
+                    if (analysis != null) {
+                        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            if (preText.isNotEmpty()) {
+                                MarkdownText(
+                                    preText,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Spacer(Modifier.height(16.dp))
+                            }
+                            
+                            // Wrapped Analysis Block
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = MaterialTheme.colorScheme.surface,
+                                shape = RoundedCornerShape(12.dp),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp, 
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                ),
+                                shadowElevation = 1.dp
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    // Section Header
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(bottom = 12.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Insights, 
+                                            contentDescription = null, 
+                                            tint = MaterialTheme.colorScheme.primary, 
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            "DECISION ANALYSIS", 
+                                            style = MaterialTheme.typography.labelLarge, 
+                                            fontWeight = FontWeight.Black, 
+                                            color = MaterialTheme.colorScheme.primary,
+                                            letterSpacing = 1.sp
+                                        )
+                                    }
+                                    
+                                    DecisionAnalysisView(analysis)
+                                }
+                            }
+                            
+                            if (postText.isNotEmpty()) {
+                                Spacer(Modifier.height(16.dp))
+                                MarkdownText(
+                                    postText,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+                    } else {
+                        MarkdownText(
+                            message.content,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                } else {
+                    MarkdownText(
+                        message.content,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun DecisionAnalysisView(analysis: DecisionAnalysis) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Summary text at the top - Styled Bold for impact
+        if (analysis.analysisSummary.isNotEmpty()) {
+            Text(
+                text = analysis.analysisSummary,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                lineHeight = 20.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+        }
+
+        // Each option as a "Pathway" card
+        analysis.options.forEach { option ->
+            val isPreferred = option.id == analysis.preferredOptionId
+            PathwayCard(option, isPreferred)
+        }
+
+        // Final Verdict / Lead Conclusion
+        if (analysis.preferredOptionId != null) {
+            Surface(
+                color = MaterialTheme.colorScheme.primary,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = "Lead Conclusion",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "Option ${analysis.preferredOptionId} is the recommended pathway with ${analysis.confidence} confidence.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f)
+                    )
+                }
+            }
+        }
+        
+        if (analysis.caveats.isNotEmpty()) {
+            Text(
+                text = "Caveats: " + analysis.caveats.joinToString("; "),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                fontStyle = FontStyle.Italic,
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun PathwayCard(option: DecisionOptionAnalysis, isPreferred: Boolean) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isPreferred) 
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) 
+            else 
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        ),
+        shape = RoundedCornerShape(16.dp),
+        border = if (isPreferred) 
+            androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)) 
+        else null
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header: Name and Strength
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Path: ${option.id}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isPreferred) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                )
+                
+                Surface(
+                    color = getStrengthColor(option.strength).copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = option.strength.uppercase(),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = getStrengthColor(option.strength),
+                        fontWeight = FontWeight.Black
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // Support Metrics
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                SupportMetric(
+                    label = "Stellar Alignment",
+                    icon = Icons.Default.Star,
+                    percentage = option.astrologicalSupport,
+                    modifier = Modifier.weight(1f)
+                )
+                SupportMetric(
+                    label = "Precision Timing",
+                    icon = Icons.Default.Schedule,
+                    percentage = option.timingSupport,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            if (option.explanation.isNotEmpty() || option.strengths.isNotEmpty() || option.concerns.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                Spacer(Modifier.height(8.dp))
+                
+                if (option.explanation.isNotEmpty()) {
+                    Text(
+                        text = option.explanation,
+                        style = MaterialTheme.typography.bodySmall,
+                        lineHeight = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                if (option.strengths.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    option.strengths.forEach { s ->
+                        Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(vertical = 1.dp)) {
+                            Icon(Icons.Default.Add, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(14.dp).padding(top = 2.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(s, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+
+                if (option.concerns.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    option.concerns.forEach { c ->
+                        Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(vertical = 1.dp)) {
+                            Icon(Icons.Default.Remove, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp).padding(top = 2.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(c, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SupportMetric(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, percentage: Int, modifier: Modifier = Modifier) {
+    if (percentage == -1) return
+    
+    Column(modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+            Spacer(Modifier.width(4.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+        }
+        Spacer(Modifier.height(4.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val color = getPercentageColor(percentage)
+            LinearProgressIndicator(
+                progress = { percentage / 100f },
+                modifier = Modifier.weight(1f).height(6.dp),
+                color = color,
+                trackColor = color.copy(alpha = 0.1f),
+                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "$percentage%",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = color
+            )
+        }
+    }
+}
+
+private fun getStrengthColor(strength: String): Color {
+    return when (strength.lowercase()) {
+        "exceptional", "very strong" -> Color(0xFF2E7D32)
+        "strong" -> Color(0xFF4CAF50)
+        "moderate" -> Color(0xFFF9A825)
+        "weak" -> Color(0xFFEF6C00)
+        "very weak" -> Color(0xFFC62828)
+        else -> Color(0xFF757575)
+    }
+}
+
+private fun getPercentageColor(percentage: Int): Color {
+    return when {
+        percentage >= 75 -> Color(0xFF4CAF50)
+        percentage >= 50 -> Color(0xFF8BC34A)
+        percentage >= 25 -> Color(0xFFFFC107)
+        else -> Color(0xFFF44336)
     }
 }
 
