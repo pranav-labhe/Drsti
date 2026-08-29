@@ -6,17 +6,14 @@ import androidx.lifecycle.viewModelScope
 import com.pranav.drsti.ai.provider.AiAstrologyService
 import com.pranav.drsti.data.repository.ChatRepository
 import com.pranav.drsti.data.repository.PersonRepository
+import com.pranav.drsti.data.repository.DecisionRepository
 import com.pranav.drsti.database.dao.DashaDao
-import com.pranav.drsti.database.dao.DecisionAnalysisDao
-import com.pranav.drsti.database.dao.DecisionDao
 import com.pranav.drsti.database.dao.KundaliDao
 import com.pranav.drsti.database.dao.PanchangDao
 import com.pranav.drsti.database.dao.PlanetaryPositionDao
 import com.pranav.drsti.database.entity.ConversationMessageEntity
 import com.pranav.drsti.database.entity.PersonEntity
 import com.pranav.drsti.database.entity.ConversationEntity
-import com.pranav.drsti.database.entity.DecisionAnalysisEntity
-import com.pranav.drsti.database.entity.DecisionEntity
 import com.pranav.drsti.model.*
 import com.pranav.drsti.util.DateTimeUtil
 import com.pranav.drsti.model.CurrentTimeContext
@@ -60,14 +57,18 @@ class ChatViewModel(
     private val kundaliDao: KundaliDao,
     private val dashaDao: DashaDao,
     private val planetaryPositionDao: PlanetaryPositionDao,
-    private val decisionDao: DecisionDao,
-    private val decisionAnalysisDao: DecisionAnalysisDao,
+    private val decisionRepository: DecisionRepository,
     private val aiServiceProvider: () -> AiAstrologyService
 ) : ViewModel() {
 
     private val json = Json { ignoreUnknownKeys = true }
     private val _state = MutableStateFlow(ChatUiState())
     val state: StateFlow<ChatUiState> = _state
+
+    private val _savedMessageIds = MutableStateFlow<Set<Long>>(emptySet())
+    val savedMessageIds: StateFlow<Set<Long>> = _savedMessageIds
+
+    fun isMessageSaved(id: Long): Boolean = _savedMessageIds.value.contains(id)
 
     // Additional public flows expected by the UI layer (HomeScreen)
     private val _conversations = MutableStateFlow<List<Conversation>>(emptyList())
@@ -220,35 +221,16 @@ class ChatViewModel(
                     
                     // Handle structured decision if present
                     reply.decisionAnalysis?.let { analysis ->
-                        val now = Instant.now().toString()
                         val options = analysis.options.map { DecisionOptionInput(it.id, it.explanation) }
                         
-                        val dId = decisionDao.insert(
-                            DecisionEntity(
-                                personId = person?.id ?: 0L,
-                                conversationId = conversationId,
-                                question = text,
-                                optionsJson = json.encodeToString(options),
-                                context = analysis.analysisSummary,
-                                status = "OPEN",
-                                createdAt = now
-                            )
-                        )
-                        
-                        decisionAnalysisDao.insert(
-                            DecisionAnalysisEntity(
-                                decisionId = dId,
-                                analysisJson = json.encodeToString(analysis),
-                                natalSnapshotJson = null,
-                                dashaSnapshotJson = null,
-                                panchangSnapshotJson = null,
-                                planetarySnapshotJson = null,
-                                promptVersion = "chat-v1-decision",
-                                model = reply.provenance.model ?: "unknown",
-                                inputHash = reply.provenance.inputHash,
-                                outputHash = reply.provenance.outputHash,
-                                analysisTimestamp = now
-                            )
+                        decisionRepository.createDecision(
+                            personId = person?.id ?: 0L,
+                            question = text,
+                            options = options,
+                            context = analysis.analysisSummary,
+                            desiredDate = null,
+                            aiContext = context,
+                            conversationId = conversationId
                         )
                     }
                     reply
@@ -256,11 +238,33 @@ class ChatViewModel(
             }
 
             result.onFailure { t ->
-                android.util.Log.e("DristiChat", "AI message flow failed", t)
                 _error.value = "Failed to get a response: ${t.localizedMessage ?: t.message}"
             }
 
             _state.update { it.copy(isSending = false) }
+        }
+    }
+
+    fun saveDecisionFromChat(messageId: Long, analysis: DecisionAnalysis, question: String) {
+        if (_savedMessageIds.value.contains(messageId)) return
+        val conversationId = _state.value.conversationId ?: return
+        val person = _state.value.activePerson ?: return
+        
+        viewModelScope.launch {
+            val aiContext = buildContext()
+            val options = analysis.options.map { DecisionOptionInput(it.id, it.explanation) }
+            
+            decisionRepository.createDecision(
+                personId = person.id,
+                question = question,
+                options = options,
+                context = analysis.analysisSummary,
+                desiredDate = null,
+                aiContext = aiContext,
+                conversationId = conversationId
+            )
+            
+            _savedMessageIds.update { it + messageId }
         }
     }
 
@@ -331,15 +335,14 @@ class ChatViewModel(
             kundaliDao: KundaliDao,
             dashaDao: DashaDao,
             planetaryPositionDao: PlanetaryPositionDao,
-            decisionDao: DecisionDao,
-            decisionAnalysisDao: DecisionAnalysisDao,
+            decisionRepository: DecisionRepository,
             aiServiceProvider: () -> AiAstrologyService
         ) = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
                 ChatViewModel(
                     chatRepository, personRepository, panchangDao, kundaliDao, dashaDao, 
-                    planetaryPositionDao, decisionDao, decisionAnalysisDao, aiServiceProvider
+                    planetaryPositionDao, decisionRepository, aiServiceProvider
                 ) as T
         }
     }

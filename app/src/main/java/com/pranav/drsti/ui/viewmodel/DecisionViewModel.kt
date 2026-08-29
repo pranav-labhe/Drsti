@@ -17,6 +17,7 @@ import com.pranav.drsti.model.*
 import com.pranav.drsti.util.DateTimeUtil
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.serialization.json.Json
 import java.time.LocalDate
 import java.time.ZoneId
@@ -52,6 +53,34 @@ class DecisionViewModel(
 
     private var activePerson: PersonEntity? = null
 
+    private val _selectedDecisionId = MutableStateFlow<Long?>(null)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val selectedDetail: StateFlow<DecisionDetail?> = _selectedDecisionId
+        .flatMapLatest { id ->
+            if (id == null) flowOf<DecisionDetail?>(null)
+            else {
+                combine(
+                    decisionRepository.observeDecision(id),
+                    decisionRepository.observeAnalyses(id),
+                    decisionRepository.observeOutcome(id),
+                    decisionRepository.observeOutcomeAnalysis(id)
+                ) { decision, analyses, outcome, outcomeAnalysis ->
+                    if (decision == null) null
+                    else {
+                        val latestAnalysis = analyses.firstOrNull()?.let {
+                            json.decodeFromString(DecisionAnalysis.serializer(), it.analysisJson)
+                        }
+                        val parsedOA = outcomeAnalysis?.let {
+                            json.decodeFromString(OutcomeAnalysis.serializer(), it.analysisJson)
+                        }
+                        DecisionDetail(decision, latestAnalysis, outcome, parsedOA)
+                    }
+                }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     init {
         viewModelScope.launch {
             personRepository.observeActive().collect { person ->
@@ -63,32 +92,21 @@ class DecisionViewModel(
                 _state.update { it.copy(decisions = list) }
             }
         }
-    }
-
-    fun openDecision(id: Long) = viewModelScope.launch {
-        _state.update { it.copy(isBusy = true, error = null) }
-        try {
-            val decision = decisionRepository.getDecision(id) ?: error("Decision not found")
-            val analyses = decisionRepository.observeAnalyses(id).first()
-            val latestAnalysis = analyses.firstOrNull()?.let { 
-                json.decodeFromString(DecisionAnalysis.serializer(), it.analysisJson)
+        
+        // Sync selectedDetail into the state for UI compatibility
+        viewModelScope.launch {
+            selectedDetail.collect { detail ->
+                _state.update { it.copy(selectedDetail = detail) }
             }
-            val outcome = decisionRepository.getOutcome(id)
-            val outcomeAnalysis = decisionRepository.getOutcomeAnalysis(id)?.let {
-                json.decodeFromString(OutcomeAnalysis.serializer(), it.analysisJson)
-            }
-            
-            _state.update { it.copy(
-                selectedDetail = DecisionDetail(decision, latestAnalysis, outcome, outcomeAnalysis),
-                isBusy = false
-            )}
-        } catch (t: Throwable) {
-            _state.update { it.copy(isBusy = false, error = t.message) }
         }
     }
 
+    fun openDecision(id: Long) {
+        _selectedDecisionId.value = id
+    }
+
     fun closeDetail() {
-        _state.update { it.copy(selectedDetail = null) }
+        _selectedDecisionId.value = null
     }
 
     fun createDecision(
@@ -102,16 +120,42 @@ class DecisionViewModel(
         try {
             val aiContext = buildAiContext(person)
             decisionRepository.createDecision(person.id, question, options, context, desiredDate, aiContext)
-            _state.update { it.copy(isBusy = false) }
         } catch (t: Throwable) {
-            _state.update { it.copy(isBusy = false, error = t.message) }
+            _state.update { it.copy(error = t.message) }
+        } finally {
+            _state.update { it.copy(isBusy = false) }
         }
     }
 
     fun recordSelection(decisionId: Long, optionId: String) = viewModelScope.launch {
         decisionRepository.recordSelection(decisionId, optionId)
-        // Refresh detail
-        openDecision(decisionId)
+    }
+
+    private val _refreshEvent = MutableSharedFlow<Unit>(replay = 0)
+    val refreshEvent: SharedFlow<Unit> = _refreshEvent
+
+    fun refreshAnalysis(decisionId: Long) = viewModelScope.launch {
+        val person = activePerson ?: return@launch _state.update { it.copy(error = "No active profile set") }
+        val decision = decisionRepository.getDecision(decisionId) ?: return@launch
+        val options: List<DecisionOptionInput> = json.decodeFromString(decision.optionsJson)
+
+        _state.update { it.copy(isBusy = true, error = null) }
+        try {
+            val aiContext = buildAiContext(person)
+            decisionRepository.createDecision(
+                personId = person.id,
+                question = decision.question,
+                options = options,
+                context = decision.context,
+                desiredDate = decision.desiredDecisionDateIso,
+                aiContext = aiContext
+            )
+            _refreshEvent.emit(Unit)
+        } catch (t: Throwable) {
+            _state.update { it.copy(error = t.message) }
+        } finally {
+            _state.update { it.copy(isBusy = false) }
+        }
     }
 
     fun recordOutcome(
@@ -123,9 +167,10 @@ class DecisionViewModel(
         _state.update { it.copy(isBusy = true, error = null) }
         try {
             decisionRepository.recordOutcome(decisionId, description, assessment, notes)
-            openDecision(decisionId)
         } catch (t: Throwable) {
-            _state.update { it.copy(isBusy = false, error = t.message) }
+            _state.update { it.copy(error = t.message) }
+        } finally {
+            _state.update { it.copy(isBusy = false) }
         }
     }
 

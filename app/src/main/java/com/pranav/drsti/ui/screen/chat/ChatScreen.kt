@@ -4,6 +4,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -59,6 +60,7 @@ fun ChatScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val conversations by viewModel.conversations.collectAsState()
+    val savedMessageIds by viewModel.savedMessageIds.collectAsState()
     val error by viewModel.error.collectAsState()
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -118,7 +120,8 @@ fun ChatScreen(
                         titleContentColor = MaterialTheme.colorScheme.onSurface
                     )
                 )
-            }
+            },
+            contentWindowInsets = WindowInsets(0, 0, 0, 0)
         ) { padding ->
             Column(
                 modifier = Modifier
@@ -167,8 +170,17 @@ fun ChatScreen(
                                 contentPadding = PaddingValues(12.dp),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                items(state.messages, key = { it.id }) { message ->
-                                    ChatBubble(message)
+                                state.messages.forEachIndexed { index, message ->
+                                    item(key = message.id) {
+                                        ChatBubble(
+                                            message = message,
+                                            isSavedInLedger = savedMessageIds.contains(message.id),
+                                            onSaveDecision = { analysis ->
+                                                val question = state.messages.getOrNull(index - 1)?.content ?: "Decision Analysis"
+                                                viewModel.saveDecisionFromChat(message.id, analysis, question)
+                                            }
+                                        )
+                                    }
                                 }
                                 if (state.isSending) {
                                     item { TypingIndicator() }
@@ -260,7 +272,11 @@ private fun EmptyChatPrompt(
 }
 
 @Composable
-fun ChatBubble(message: ConversationMessageEntity) {
+fun ChatBubble(
+    message: ConversationMessageEntity,
+    isSavedInLedger: Boolean = false,
+    onSaveDecision: (DecisionAnalysis) -> Unit = {}
+) {
     val isUser = message.role == "user"
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -413,8 +429,25 @@ fun ChatBubble(message: ConversationMessageEntity) {
                                             style = MaterialTheme.typography.labelLarge, 
                                             fontWeight = FontWeight.Black, 
                                             color = MaterialTheme.colorScheme.primary,
-                                            letterSpacing = 1.sp
+                                            letterSpacing = 1.sp,
+                                            modifier = Modifier.weight(1f)
                                         )
+
+                                        IconButton(
+                                            onClick = { 
+                                                if (!isSavedInLedger) {
+                                                    onSaveDecision(analysis)
+                                                }
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(
+                                                if (isSavedInLedger) Icons.Default.Bookmark else Icons.Default.BookmarkAdd,
+                                                contentDescription = "Save to Ledger",
+                                                tint = if (isSavedInLedger) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
                                     }
                                     
                                     DecisionAnalysisView(analysis)
@@ -548,18 +581,15 @@ private fun PathwayCard(option: DecisionOptionAnalysis, isPreferred: Boolean) {
                     color = if (isPreferred) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                 )
                 
-                Surface(
-                    color = getStrengthColor(option.strength).copy(alpha = 0.1f),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        text = option.strength.uppercase(),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = getStrengthColor(option.strength),
-                        fontWeight = FontWeight.Black
-                    )
-                }
+                // Strength Indicator Dot
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .background(
+                            color = getStrengthColor(option.strength),
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                )
             }
 
             Spacer(Modifier.height(12.dp))

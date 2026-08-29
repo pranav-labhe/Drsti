@@ -47,7 +47,8 @@ fun PanchangScreen(
                     IconButton(onClick = { viewModel.refresh() }) { Icon(Icons.Default.Refresh, contentDescription = "Regenerate") }
                 }
             )
-        }
+        },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { padding ->
         Column(modifier = modifier.fillMaxSize().padding(padding)) {
             // Date Selector

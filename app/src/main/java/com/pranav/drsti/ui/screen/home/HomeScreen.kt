@@ -70,8 +70,7 @@ fun HomeScreen(
             serviceLocator.database.kundaliDao(),
             serviceLocator.database.dashaDao(),
             serviceLocator.database.planetaryPositionDao(),
-            serviceLocator.database.decisionDao(),
-            serviceLocator.database.decisionAnalysisDao(),
+            serviceLocator.decisionRepository,
             { serviceLocator.aiService.value }
         )
     )
@@ -133,13 +132,18 @@ fun HomeScreen(
         bottomBar = {
             NavigationBar {
                 tabs.forEach { tab ->
+                    val isSelected = currentRoute == tab.route
                     NavigationBarItem(
-                        selected = currentRoute == tab.route,
+                        selected = isSelected,
                         onClick = {
-                            navController.navigate(tab.route) {
-                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
+                            if (currentRoute != tab.route) {
+                                navController.navigate(tab.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
                             }
                         },
                         icon = { Icon(tab.icon, contentDescription = tab.label) },
@@ -149,22 +153,45 @@ fun HomeScreen(
             }
         }
     ) { padding ->
-        // Use bottom padding from scaffold to ensure child screens stay above the navigation bar
         NavHost(
             navController = navController,
             startDestination = HomeTab.Chat.route,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = 78.dp)
+                .padding(padding)
         ) {
             composable(HomeTab.Chat.route) {
                 ChatScreen(
                     viewModel = chatViewModel,
-                    onNavigateToSettings = { navController.navigate(HomeTab.Settings.route) },
+                    onNavigateToSettings = { 
+                        navController.navigate(HomeTab.Settings.route) {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
                     onNavigateToProfile = onOpenProfile,
-                    onNavigateToKundali = { navController.navigate(HomeTab.Kundali.route) },
-                    onNavigateToPanchang = { navController.navigate(HomeTab.Panchang.route) },
-                    onNavigateToDecisions = { navController.navigate(HomeTab.Decisions.route) }
+                    onNavigateToKundali = { 
+                        navController.navigate(HomeTab.Kundali.route) {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onNavigateToPanchang = { 
+                        navController.navigate(HomeTab.Panchang.route) {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onNavigateToDecisions = { 
+                        navController.navigate(HomeTab.Decisions.route) {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
                 )
             }
             composable(HomeTab.Decisions.route) { DecisionScreen(decisionViewModel) }
