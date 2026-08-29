@@ -55,7 +55,8 @@ fun KundaliScreen(
                     }
                 }
             )
-        }
+        },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { padding ->
         Column(modifier = modifier.fillMaxSize().padding(padding)) {
             TabRow(selectedTabIndex = selectedTab) {

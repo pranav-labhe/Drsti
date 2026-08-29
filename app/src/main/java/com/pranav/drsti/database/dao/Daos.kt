@@ -202,6 +202,12 @@ interface DecisionDao {
     @Query("SELECT * FROM decision WHERE id = :id")
     suspend fun getById(id: Long): DecisionEntity?
 
+    @Query("SELECT * FROM decision WHERE id = :id")
+    fun observeById(id: Long): Flow<DecisionEntity?>
+
+    @Query("SELECT * FROM decision WHERE personId = :personId AND question = :question LIMIT 1")
+    suspend fun getByQuestion(personId: Long, question: String): DecisionEntity?
+
     @Query("SELECT * FROM decision")
     suspend fun getAll(): List<DecisionEntity>
 
@@ -236,6 +242,9 @@ interface DecisionAnalysisDao {
     @Insert
     suspend fun insert(entity: DecisionAnalysisEntity): Long
 
+    @Update
+    suspend fun update(entity: DecisionAnalysisEntity)
+
     @Query("DELETE FROM decision_analysis WHERE decisionId = :decisionId")
     suspend fun deleteByDecisionId(decisionId: Long)
 }
@@ -244,6 +253,9 @@ interface DecisionAnalysisDao {
 interface DecisionOutcomeDao {
     @Query("SELECT * FROM decision_outcome WHERE decisionId = :decisionId LIMIT 1")
     suspend fun getForDecision(decisionId: Long): DecisionOutcomeEntity?
+
+    @Query("SELECT * FROM decision_outcome WHERE decisionId = :decisionId LIMIT 1")
+    fun observeForDecision(decisionId: Long): Flow<DecisionOutcomeEntity?>
 
     @Query("SELECT * FROM decision_outcome")
     suspend fun getAll(): List<DecisionOutcomeEntity>
@@ -254,6 +266,9 @@ interface DecisionOutcomeDao {
     @Insert
     suspend fun insert(entity: DecisionOutcomeEntity): Long
 
+    @Update
+    suspend fun update(entity: DecisionOutcomeEntity)
+
     @Query("DELETE FROM decision_outcome WHERE decisionId = :decisionId")
     suspend fun deleteByDecisionId(decisionId: Long)
 }
@@ -263,6 +278,9 @@ interface OutcomeAnalysisDao {
     @Query("SELECT * FROM outcome_analysis WHERE decisionId = :decisionId ORDER BY generatedAt DESC LIMIT 1")
     suspend fun getForDecision(decisionId: Long): OutcomeAnalysisEntity?
 
+    @Query("SELECT * FROM outcome_analysis WHERE decisionId = :decisionId ORDER BY generatedAt DESC LIMIT 1")
+    fun observeForDecision(decisionId: Long): Flow<OutcomeAnalysisEntity?>
+
     @Query("SELECT * FROM outcome_analysis")
     suspend fun getAll(): List<OutcomeAnalysisEntity>
 
@@ -271,6 +289,9 @@ interface OutcomeAnalysisDao {
 
     @Insert
     suspend fun insert(entity: OutcomeAnalysisEntity): Long
+
+    @Update
+    suspend fun update(entity: OutcomeAnalysisEntity)
 
     @Query("DELETE FROM outcome_analysis WHERE decisionId = :decisionId")
     suspend fun deleteByDecisionId(decisionId: Long)

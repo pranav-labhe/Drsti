@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -11,6 +12,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.AddChart
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import com.pranav.drsti.database.entity.DecisionEntity
@@ -39,6 +42,14 @@ fun DecisionScreen(viewModel: DecisionViewModel, modifier: Modifier = Modifier) 
     val state by viewModel.state.collectAsState()
     var showNewDecision by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(Unit) {
+        viewModel.refreshEvent.collect {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            snackbarHostState.showSnackbar("Analysis updated with latest planetary data.")
+        }
+    }
 
     LaunchedEffect(state.isBusy) {
         if (!state.isBusy && !state.error.isNullOrBlank()) {
@@ -52,7 +63,9 @@ fun DecisionScreen(viewModel: DecisionViewModel, modifier: Modifier = Modifier) 
         when {
             state.selectedDetail != null -> DecisionDetailView(
                 state = state,
+                snackbarHostState = snackbarHostState,
                 onBack = viewModel::closeDetail,
+                onRefresh = { viewModel.refreshAnalysis(state.selectedDetail!!.decision.id) },
                 onRecordSelection = viewModel::recordSelection,
                 onRecordOutcome = viewModel::recordOutcome
             )
@@ -67,6 +80,8 @@ fun DecisionScreen(viewModel: DecisionViewModel, modifier: Modifier = Modifier) 
             )
             else -> DecisionListView(
                 decisions = state.decisions,
+                error = state.error,
+                snackbarHostState = snackbarHostState,
                 onOpen = viewModel::openDecision,
                 onDelete = viewModel::deleteDecision,
                 onNew = { showNewDecision = true }
@@ -79,6 +94,8 @@ fun DecisionScreen(viewModel: DecisionViewModel, modifier: Modifier = Modifier) 
 @Composable
 private fun DecisionListView(
     decisions: List<DecisionEntity>, 
+    error: String?,
+    snackbarHostState: SnackbarHostState,
     onOpen: (Long) -> Unit, 
     onDelete: (Long) -> Unit,
     onNew: () -> Unit
@@ -89,60 +106,79 @@ private fun DecisionListView(
                 title = { Text("Decision Journal", fontWeight = FontWeight.Bold) },
                 actions = { IconButton(onClick = onNew) { Icon(Icons.Filled.Add, contentDescription = "New decision") } }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { padding ->
-        if (decisions.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
-                Text(
-                    "No decisions yet. Tap + to compare your first set of options \u2014 D\u1e5b\u1e63\u1e6di will lay out astrological and timing support for each path, side by side.",
-                    textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium
-                )
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            error?.let { err ->
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = err,
+                        modifier = Modifier.padding(12.dp),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(decisions, key = { it.id }) { decision ->
-                    ElevatedCard(
-                        onClick = { onOpen(decision.id) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
+
+            if (decisions.isEmpty()) {
+                Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        "No decisions yet. Tap + to compare your first set of options \u2014 D\u1e5b\u1e63\u1e6di will lay out astrological and timing support for each path, side by side.",
+                        textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(decisions, key = { it.id }) { decision ->
+                        ElevatedCard(
+                            onClick = { onOpen(decision.id) },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            ListItem(
-                                headlineContent = { Text(decision.question, fontWeight = FontWeight.SemiBold, maxLines = 2) },
-                                supportingContent = { Text(statusLabel(decision.status)) },
-                                modifier = Modifier.weight(1f),
-                                colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
-                            )
-                            IconButton(
-                                onClick = { onDelete(decision.id) },
-                                modifier = Modifier.padding(end = 8.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = "Delete",
-                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(24.dp)
+                                ListItem(
+                                    headlineContent = { Text(decision.question, fontWeight = FontWeight.SemiBold, maxLines = 2) },
+                                    supportingContent = { Text(statusLabel(decision.status)) },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
                                 )
+                                IconButton(
+                                    onClick = { onDelete(decision.id) },
+                                    modifier = Modifier.padding(end = 8.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = "Delete",
+                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                item {
-                    Spacer(Modifier.height(32.dp))
-                    Text(
-                        text = "Vedic decision analysis is an interpretive tool for reflection. It is not a prediction of certainty and does not substitute for professional advice.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp)
-                    )
+                    item {
+                        Spacer(Modifier.height(32.dp))
+                        Text(
+                            text = "Vedic decision analysis is an interpretive tool for reflection. It is not a prediction of certainty and does not substitute for professional advice.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp)
+                        )
+                    }
                 }
             }
         }
@@ -173,7 +209,8 @@ private fun NewDecisionForm(
                 title = { Text("New Decision") },
                 navigationIcon = { IconButton(onClick = onCancel) { Icon(Icons.Filled.Close, contentDescription = "Cancel") } }
             )
-        }
+        },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
@@ -240,7 +277,9 @@ private fun NewDecisionForm(
 @Composable
 private fun DecisionDetailView(
     state: DecisionUiState,
+    snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
+    onRefresh: () -> Unit,
     onRecordSelection: (Long, String) -> Unit,
     onRecordOutcome: (Long, String, String, String?) -> Unit
 ) {
@@ -251,15 +290,42 @@ private fun DecisionDetailView(
         topBar = {
             TopAppBar(
                 title = { Text("Analysis Detail") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } }
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
+                actions = {
+                    if (detail.decision.status == "OPEN" || detail.decision.status == "DECIDED") {
+                        IconButton(onClick = onRefresh, enabled = !state.isBusy) {
+                            if (state.isBusy) CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            else Icon(Icons.Default.Refresh, contentDescription = "Refresh Analysis")
+                        }
+                    }
+                }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            state.error?.let { err ->
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = err,
+                            modifier = Modifier.padding(12.dp),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+
             item {
                 Text(detail.decision.question, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 detail.decision.context?.let { 
@@ -352,6 +418,8 @@ private fun DecisionDetailView(
 
 @Composable
 private fun OptionCard(option: DecisionOptionAnalysis, isPreferred: Boolean, isSelected: Boolean, canSelect: Boolean, onSelect: () -> Unit) {
+    val displayName = if (option.id.length == 1 && option.id[0].isLetter()) "Option ${option.id}" else option.id
+
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.elevatedCardColors(
@@ -361,8 +429,18 @@ private fun OptionCard(option: DecisionOptionAnalysis, isPreferred: Boolean, isS
         )
     ) {
         Column(Modifier.padding(16.dp)) {
-            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Text("Option ${option.id}" + if (isPreferred) " \u2b50" else "", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            // Option Title
+            Text(displayName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            
+            // Status/Score Row - Aligned Right
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (isPreferred) {
+                    Text("\u2b50", modifier = Modifier.padding(end = 8.dp), fontSize = 18.sp)
+                }
                 Surface(
                     color = MaterialTheme.colorScheme.primary,
                     shape = ShapeDefaults.Small
@@ -371,7 +449,8 @@ private fun OptionCard(option: DecisionOptionAnalysis, isPreferred: Boolean, isS
                         "${option.astrologicalSupport}% Support", 
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onPrimary
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -450,6 +529,8 @@ private fun DecisionListViewPreview() {
     DrshtiTheme {
         DecisionListView(
             decisions = listOf(PreviewSamples.decision),
+            error = null,
+            snackbarHostState = SnackbarHostState(),
             onOpen = {},
             onDelete = {},
             onNew = {}

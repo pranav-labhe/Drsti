@@ -28,14 +28,22 @@ class DecisionRepository(
 
     suspend fun getDecision(id: Long): DecisionEntity? = decisionDao.getById(id)
 
+    fun observeDecision(id: Long): Flow<DecisionEntity?> = decisionDao.observeById(id)
+
     fun observeAnalyses(decisionId: Long): Flow<List<DecisionAnalysisEntity>> =
         analysisDao.observeForDecision(decisionId)
 
     suspend fun getOutcome(decisionId: Long): DecisionOutcomeEntity? =
         outcomeDao.getForDecision(decisionId)
 
+    fun observeOutcome(decisionId: Long): Flow<DecisionOutcomeEntity?> =
+        outcomeDao.observeForDecision(decisionId)
+
     suspend fun getOutcomeAnalysis(decisionId: Long): OutcomeAnalysisEntity? =
         outcomeAnalysisDao.getForDecision(decisionId)
+
+    fun observeOutcomeAnalysis(decisionId: Long): Flow<OutcomeAnalysisEntity?> =
+        outcomeAnalysisDao.observeForDecision(decisionId)
 
     suspend fun createDecision(
         personId: Long,
@@ -43,24 +51,42 @@ class DecisionRepository(
         options: List<DecisionOptionInput>,
         context: String?,
         desiredDate: String?,
-        aiContext: AiRequestContext
+        aiContext: AiRequestContext,
+        conversationId: Long? = null
     ): Long {
         val now = Instant.now().toString()
-        val decision = DecisionEntity(
-            personId = personId,
-            conversationId = null,
-            question = question,
-            optionsJson = json.encodeToString(options),
-            context = context,
-            desiredDecisionDateIso = desiredDate,
-            status = "OPEN",
-            createdAt = now
-        )
-        val id = decisionDao.insert(decision)
+        val existing = decisionDao.getByQuestion(personId, question)
+        
+        val id = if (existing != null) {
+            // Update existing decision with potentially new data
+            val updated = existing.copy(
+                optionsJson = json.encodeToString(options),
+                context = context,
+                conversationId = conversationId ?: existing.conversationId,
+                desiredDecisionDateIso = desiredDate ?: existing.desiredDecisionDateIso
+            )
+            decisionDao.update(updated)
+            existing.id
+        } else {
+            val decision = DecisionEntity(
+                personId = personId,
+                conversationId = conversationId,
+                question = question,
+                optionsJson = json.encodeToString(options),
+                context = context,
+                desiredDecisionDateIso = desiredDate,
+                status = "OPEN",
+                createdAt = now
+            )
+            decisionDao.insert(decision)
+        }
 
-        // Perform AI analysis immediately
+        // Run fresh analysis (consistency for Form, Chat Save, and Refresh)
         val analysis = aiServiceProvider().analyzeDecision(aiContext, DecisionRequest(question, options, context))
+        
+        val existingAnalysis = analysisDao.getLatestForDecision(id)
         val analysisEntity = DecisionAnalysisEntity(
+            id = existingAnalysis?.id ?: 0L,
             decisionId = id,
             analysisJson = json.encodeToString(analysis),
             natalSnapshotJson = aiContext.kundali?.let { json.encodeToString(it) },
@@ -73,7 +99,12 @@ class DecisionRepository(
             outputHash = analysis.provenance.outputHash ?: "",
             analysisTimestamp = now
         )
-        analysisDao.insert(analysisEntity)
+
+        if (existingAnalysis != null) {
+            analysisDao.update(analysisEntity)
+        } else {
+            analysisDao.insert(analysisEntity)
+        }
         return id
     }
 
@@ -94,16 +125,24 @@ class DecisionRepository(
     ) {
         val decision = decisionDao.getById(decisionId) ?: return
         val now = Instant.now().toString()
+        
+        val existingOutcome = outcomeDao.getForDecision(decisionId)
         val outcome = DecisionOutcomeEntity(
+            id = existingOutcome?.id ?: 0L,
             decisionId = decisionId,
             description = description,
-            occurredAtIso = now,
+            occurredAtIso = existingOutcome?.occurredAtIso ?: now,
             selectedOptionId = decision.selectedOptionId,
             userAssessment = assessment,
             notes = notes,
             recordedAt = now
         )
-        outcomeDao.insert(outcome)
+        
+        if (existingOutcome != null) {
+            outcomeDao.update(outcome)
+        } else {
+            outcomeDao.insert(outcome)
+        }
         
         // Update decision status
         decisionDao.update(decision.copy(status = "COMPLETED"))
@@ -114,19 +153,26 @@ class DecisionRepository(
             val originalAnalysis = json.decodeFromString(DecisionAnalysis.serializer(), latestAnalysisEntity.analysisJson)
             val outcomeInput = OutcomeInput(
                 description = description,
-                occurredAtIso = now,
+                occurredAtIso = outcome.occurredAtIso,
                 selectedOptionId = decision.selectedOptionId,
                 userAssessment = assessment,
                 notes = notes
             )
             val retrospective = aiServiceProvider().analyzeOutcome(originalAnalysis, outcomeInput)
             
+            val existingOA = outcomeAnalysisDao.getForDecision(decisionId)
             val oaEntity = OutcomeAnalysisEntity(
+                id = existingOA?.id ?: 0L,
                 decisionId = decisionId,
                 analysisJson = json.encodeToString(retrospective),
                 generatedAt = now
             )
-            outcomeAnalysisDao.insert(oaEntity)
+            
+            if (existingOA != null) {
+                outcomeAnalysisDao.update(oaEntity)
+            } else {
+                outcomeAnalysisDao.insert(oaEntity)
+            }
         }
     }
 
