@@ -24,9 +24,11 @@ import com.pranav.drsti.database.entity.*
         DecisionOutcomeEntity::class,
         OutcomeAnalysisEntity::class,
         AIRequestLogEntity::class,
-        AppSettingsEntity::class
+        AppSettingsEntity::class,
+        ConversationStateEntity::class,
+        CalibrationStatsEntity::class
     ],
-    version = 2,
+    version = 4,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -47,6 +49,8 @@ abstract class DrishtiDatabase : RoomDatabase() {
     abstract fun outcomeAnalysisDao(): OutcomeAnalysisDao
     abstract fun aiRequestLogDao(): AIRequestLogDao
     abstract fun appSettingsDao(): AppSettingsDao
+    abstract fun conversationStateDao(): ConversationStateDao
+    abstract fun calibrationStatsDao(): CalibrationStatsDao
 
     companion object {
         @Volatile private var instance: DrishtiDatabase? = null

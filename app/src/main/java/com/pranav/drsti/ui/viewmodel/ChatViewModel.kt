@@ -41,7 +41,8 @@ data class ChatUiState(
     val messages: List<ConversationMessageEntity> = emptyList(),
     val isSending: Boolean = false,
     val conversationId: Long? = null,
-    val activePerson: PersonEntity? = null
+    val activePerson: PersonEntity? = null,
+    val conversationState: ConversationState? = null
 )
 
 /**
@@ -118,6 +119,16 @@ class ChatViewModel(
                     if (id != null) chatRepository.observeRecent(id) else emptyFlow()
                 }.collect { msgs ->
                     _state.update { it.copy(messages = msgs.reversed()) }
+                }
+        }
+
+        // Observe conversation state
+        viewModelScope.launch {
+            _state.map { it.conversationId }
+                .flatMapLatest { id ->
+                    if (id != null) chatRepository.observeState(id) else emptyFlow()
+                }.collect { convState ->
+                    _state.update { it.copy(conversationState = convState) }
                 }
         }
 

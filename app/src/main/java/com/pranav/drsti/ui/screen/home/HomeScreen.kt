@@ -56,7 +56,8 @@ fun HomeScreen(
     serviceLocator: ServiceLocator,
     onOpenProfile: () -> Unit,
     onOpenPlaces: () -> Unit,
-    onOpenDiagnostics: () -> Unit
+    onOpenDiagnostics: () -> Unit,
+    onOpenCalibration: () -> Unit
 ) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -207,7 +208,8 @@ fun HomeScreen(
                     database = serviceLocator.database,
                     onOpenProfile = onOpenProfile,
                     onOpenPlaces = onOpenPlaces,
-                    onOpenDiagnostics = onOpenDiagnostics
+                    onOpenDiagnostics = onOpenDiagnostics,
+                    onOpenCalibration = onOpenCalibration
                 )
             }
         }

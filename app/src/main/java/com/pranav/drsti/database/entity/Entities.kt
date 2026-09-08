@@ -202,3 +202,27 @@ data class AppSettingsEntity(
     val value: String
 )
 
+@Entity(tableName = "conversation_state")
+@Serializable
+data class ConversationStateEntity(
+    @PrimaryKey val conversationId: Long,
+    val activeTopic: String?,
+    val activeDecisionId: Long?,
+    val languagePreference: String,
+    val detailLevel: String,
+    val lastFactsSnapshot: String?,
+    val updatedAt: String
+)
+
+@Entity(tableName = "calibration_stats")
+@Serializable
+data class CalibrationStatsEntity(
+    @PrimaryKey val id: Int = 1, // Only one row for global stats
+    val decisionsAnalyzed: Int,
+    val outcomesRecorded: Int,
+    val directionallyCorrect: Int,
+    val overconfidenceCount: Int,
+    val underconfidenceCount: Int,
+    val updatedAt: String
+)
+

@@ -335,3 +335,30 @@ interface AppSettingsDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: AppSettingsEntity)
 }
+
+@Dao
+interface ConversationStateDao {
+    @Query("SELECT * FROM conversation_state WHERE conversationId = :conversationId")
+    suspend fun getByConversationId(conversationId: Long): ConversationStateEntity?
+
+    @Query("SELECT * FROM conversation_state WHERE conversationId = :conversationId")
+    fun observeByConversationId(conversationId: Long): Flow<ConversationStateEntity?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: ConversationStateEntity)
+
+    @Query("DELETE FROM conversation_state WHERE conversationId = :conversationId")
+    suspend fun deleteByConversationId(conversationId: Long)
+}
+
+@Dao
+interface CalibrationStatsDao {
+    @Query("SELECT * FROM calibration_stats WHERE id = 1")
+    fun observeGlobal(): Flow<CalibrationStatsEntity?>
+
+    @Query("SELECT * FROM calibration_stats WHERE id = 1")
+    suspend fun getGlobal(): CalibrationStatsEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: CalibrationStatsEntity)
+}

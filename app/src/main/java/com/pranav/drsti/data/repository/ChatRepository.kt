@@ -2,23 +2,58 @@ package com.pranav.drsti.data.repository
 
 import com.pranav.drsti.database.dao.ConversationDao
 import com.pranav.drsti.database.dao.ConversationMessageDao
+import com.pranav.drsti.database.dao.ConversationStateDao
 import com.pranav.drsti.database.entity.ConversationEntity
 import com.pranav.drsti.database.entity.ConversationMessageEntity
+import com.pranav.drsti.database.entity.ConversationStateEntity
+import com.pranav.drsti.model.ConversationState
+import com.pranav.drsti.model.DetailLevel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import java.time.Instant
 
 /**
  * Local-only chat history with chunked/paginated loading (spec §5).
- * Never loads a whole conversation into memory at once.
+ * Also tracks conversation state for offline context continuity.
  */
 class ChatRepository(
     private val conversationDao: ConversationDao,
-    private val messageDao: ConversationMessageDao
+    private val messageDao: ConversationMessageDao,
+    private val stateDao: ConversationStateDao
 ) {
     val defaultPageSize = 50
 
     fun observeConversations(): Flow<List<ConversationEntity>> = conversationDao.observeAll()
+
+    fun observeState(conversationId: Long): Flow<ConversationState?> =
+        stateDao.observeByConversationId(conversationId).map { it?.toModel() }
+
+    suspend fun getState(conversationId: Long): ConversationState? =
+        stateDao.getByConversationId(conversationId)?.toModel()
+
+    suspend fun updateState(state: ConversationState) {
+        stateDao.upsert(state.toEntity())
+    }
+
+    private fun ConversationStateEntity.toModel() = ConversationState(
+        conversationId = conversationId,
+        activeTopic = activeTopic,
+        activeDecisionId = activeDecisionId,
+        languagePreference = languagePreference,
+        detailLevel = DetailLevel.valueOf(detailLevel),
+        lastFactsSnapshot = lastFactsSnapshot
+    )
+
+    private fun ConversationState.toEntity() = ConversationStateEntity(
+        conversationId = conversationId,
+        activeTopic = activeTopic,
+        activeDecisionId = activeDecisionId,
+        languagePreference = languagePreference,
+        detailLevel = detailLevel.name,
+        lastFactsSnapshot = lastFactsSnapshot,
+        updatedAt = Instant.now().toString()
+    )
 
     suspend fun getOrCreateDefaultConversation(): ConversationEntity {
         // Simple approach: keep a single ongoing "Home Chat" conversation for V1 (matches spec's

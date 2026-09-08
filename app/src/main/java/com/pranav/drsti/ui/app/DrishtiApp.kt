@@ -11,6 +11,7 @@ import androidx.navigation.compose.rememberNavController
 import com.pranav.drsti.di.ServiceLocator
 import com.pranav.drsti.ui.screen.PersonScreen
 import com.pranav.drsti.ui.screen.PlaceScreen
+import com.pranav.drsti.ui.screen.diagnostics.CalibrationScreen
 import com.pranav.drsti.ui.screen.diagnostics.DiagnosticsScreen
 import com.pranav.drsti.ui.screen.home.HomeScreen
 import com.pranav.drsti.ui.screen.onboarding.OnboardingScreen
@@ -35,6 +36,7 @@ private const val ROUTE_HOME = "home_root"
 private const val ROUTE_PROFILE = "profile"
 private const val ROUTE_PLACES = "places"
 private const val ROUTE_DIAGNOSTICS = "diagnostics"
+private const val ROUTE_CALIBRATION = "calibration"
 private const val ROUTE_ONBOARDING = "onboarding"
 
 /** App-level nav graph: the tabbed Home experience, plus full-screen Profile/Places pushed from Settings. */
@@ -80,7 +82,8 @@ fun DrishtiApp(serviceLocator: ServiceLocator) {
                     serviceLocator = serviceLocator,
                     onOpenProfile = { navController.navigate(ROUTE_PROFILE) },
                     onOpenPlaces = { navController.navigate(ROUTE_PLACES) },
-                    onOpenDiagnostics = { navController.navigate(ROUTE_DIAGNOSTICS) }
+                    onOpenDiagnostics = { navController.navigate(ROUTE_DIAGNOSTICS) },
+                    onOpenCalibration = { navController.navigate(ROUTE_CALIBRATION) }
                 )
             }
             composable(ROUTE_PROFILE) {
@@ -91,6 +94,9 @@ fun DrishtiApp(serviceLocator: ServiceLocator) {
             }
             composable(ROUTE_DIAGNOSTICS) {
                 DiagnosticsScreen(diagnosticsViewModel, onBack = { navController.popBackStack() })
+            }
+            composable(ROUTE_CALIBRATION) {
+                CalibrationScreen(serviceLocator.decisionRepository, onBack = { navController.popBackStack() })
             }
         }
     }

@@ -156,6 +156,31 @@ fun ChatScreen(
                     }
                 }
 
+                state.conversationState?.activeTopic?.let { topic ->
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.TrackChanges,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Context: $topic",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        }
+                    }
+                }
+
                 Box(modifier = Modifier.weight(1f)) {
                     if (state.messages.isEmpty()) {
                         EmptyChatPrompt(
@@ -478,6 +503,35 @@ fun ChatBubble(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium
                     )
+                }
+
+                if (!isUser && message.intent?.startsWith("OFFLINE_") == true) {
+                    Box(
+                        modifier = Modifier
+                            .padding(start = 16.dp, bottom = 8.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                modifier = Modifier.size(10.dp),
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                "OFFLINE INSIGHT",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 9.sp,
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
                 }
             }
         }

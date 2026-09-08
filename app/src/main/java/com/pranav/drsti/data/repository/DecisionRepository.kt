@@ -1,14 +1,8 @@
 package com.pranav.drsti.data.repository
 
 import com.pranav.drsti.ai.provider.AiAstrologyService
-import com.pranav.drsti.database.dao.DecisionAnalysisDao
-import com.pranav.drsti.database.dao.DecisionDao
-import com.pranav.drsti.database.dao.DecisionOutcomeDao
-import com.pranav.drsti.database.dao.OutcomeAnalysisDao
-import com.pranav.drsti.database.entity.DecisionAnalysisEntity
-import com.pranav.drsti.database.entity.DecisionEntity
-import com.pranav.drsti.database.entity.DecisionOutcomeEntity
-import com.pranav.drsti.database.entity.OutcomeAnalysisEntity
+import com.pranav.drsti.database.dao.*
+import com.pranav.drsti.database.entity.*
 import com.pranav.drsti.model.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.encodeToString
@@ -20,11 +14,14 @@ class DecisionRepository(
     private val analysisDao: DecisionAnalysisDao,
     private val outcomeDao: DecisionOutcomeDao,
     private val outcomeAnalysisDao: OutcomeAnalysisDao,
+    private val calibrationDao: CalibrationStatsDao,
     private val aiServiceProvider: () -> AiAstrologyService
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
     fun observeAll(): Flow<List<DecisionEntity>> = decisionDao.observeAll()
+
+    fun observeCalibrationStats(): Flow<CalibrationStatsEntity?> = calibrationDao.observeGlobal()
 
     suspend fun getDecision(id: Long): DecisionEntity? = decisionDao.getById(id)
 
@@ -104,6 +101,16 @@ class DecisionRepository(
             analysisDao.update(analysisEntity)
         } else {
             analysisDao.insert(analysisEntity)
+            
+            // Increment analyzed count for new decisions
+            val current = calibrationDao.getGlobal() ?: CalibrationStatsEntity(
+                decisionsAnalyzed = 0, outcomesRecorded = 0, directionallyCorrect = 0,
+                overconfidenceCount = 0, underconfidenceCount = 0, updatedAt = Instant.now().toString()
+            )
+            calibrationDao.upsert(current.copy(
+                decisionsAnalyzed = current.decisionsAnalyzed + 1,
+                updatedAt = Instant.now().toString()
+            ))
         }
         return id
     }
@@ -173,7 +180,45 @@ class DecisionRepository(
             } else {
                 outcomeAnalysisDao.insert(oaEntity)
             }
+
+            // Update Global Calibration Stats
+            updateGlobalCalibration(originalAnalysis, outcomeInput)
         }
+    }
+
+    private suspend fun updateGlobalCalibration(original: DecisionAnalysis, outcome: OutcomeInput) {
+        val chosen = original.options.firstOrNull { it.id == outcome.selectedOptionId } ?: return
+        val current = calibrationDao.getGlobal() ?: CalibrationStatsEntity(
+            decisionsAnalyzed = 0, outcomesRecorded = 0, directionallyCorrect = 0,
+            overconfidenceCount = 0, underconfidenceCount = 0, updatedAt = Instant.now().toString()
+        )
+
+        val isBetter = outcome.userAssessment.contains("better", true)
+        val isWorse = outcome.userAssessment.contains("worse", true)
+        val isAsExpected = outcome.userAssessment.contains("as expected", true)
+
+        val isHighSupport = chosen.astrologicalSupport >= 60
+        val isLowSupport = chosen.astrologicalSupport < 45
+
+        var correct = 0
+        var over = 0
+        var under = 0
+
+        if ((isHighSupport && (isBetter || isAsExpected)) || (isLowSupport && isWorse)) {
+            correct = 1
+        } else if (isHighSupport && isWorse) {
+            over = 1
+        } else if (isLowSupport && isBetter) {
+            under = 1
+        }
+
+        calibrationDao.upsert(current.copy(
+            outcomesRecorded = current.outcomesRecorded + 1,
+            directionallyCorrect = current.directionallyCorrect + correct,
+            overconfidenceCount = current.overconfidenceCount + over,
+            underconfidenceCount = current.underconfidenceCount + under,
+            updatedAt = Instant.now().toString()
+        ))
     }
 
     suspend fun deleteDecision(id: Long) {

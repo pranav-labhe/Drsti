@@ -50,6 +50,7 @@ fun SettingsScreen(
     onOpenProfile: () -> Unit,
     onOpenPlaces: () -> Unit,
     onOpenDiagnostics: () -> Unit,
+    onOpenCalibration: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.state.collectAsState()
@@ -88,6 +89,11 @@ fun SettingsScreen(
                     headline = "Places",
                     supporting = "Manage saved locations for Panchang and transits",
                     onClick = onOpenPlaces
+                )
+                OutlinedListItem(
+                    headline = "Calibration & Insights",
+                    supporting = "View alignment stats for offline reasoning",
+                    onClick = onOpenCalibration
                 )
             }
 

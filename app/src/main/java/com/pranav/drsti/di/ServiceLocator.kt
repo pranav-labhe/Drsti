@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
  * instance and hands it down through composition locals / constructor
  * params — see ui/app/DrishtiApp.kt.
  */
-class ServiceLocator(context: Context) {
+class ServiceLocator(private val context: Context) {
 
     val applicationScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -36,17 +36,25 @@ class ServiceLocator(context: Context) {
     val placeRepository: PlaceRepository = PlaceRepository(context, database.placeDao()).also {
         applicationScope.launch { it.seedDefaultPlacesIfEmpty() }
     }
-    val chatRepository: ChatRepository = ChatRepository(database.conversationDao(), database.conversationMessageDao())
+    val chatRepository: ChatRepository = ChatRepository(
+        database.conversationDao(),
+        database.conversationMessageDao(),
+        database.conversationStateDao()
+    )
     val decisionRepository: DecisionRepository = DecisionRepository(
         database.decisionDao(),
         database.decisionAnalysisDao(),
         database.decisionOutcomeDao(),
         database.outcomeAnalysisDao(),
+        database.calibrationStatsDao(),
         { aiService.value }
     )
 
     private val _aiService = MutableStateFlow<AiAstrologyService>(
-        AiProviderFactory.create(AiMode.MOCK, apiKey = null, model = "gpt-4o-mini", logDao = database.aiRequestLogDao())
+        AiProviderFactory.create(
+            AiMode.MOCK, apiKey = null, model = "gpt-4o-mini",
+            logDao = database.aiRequestLogDao(), context = context, stateDao = database.conversationStateDao()
+        )
     )
     val aiService: StateFlow<AiAstrologyService> = _aiService
 
@@ -65,7 +73,10 @@ class ServiceLocator(context: Context) {
         val apiKey = secureStorage.getApiKey()
         val geminiApiKey = secureStorage.getGeminiApiKey()
         val logDao = database.aiRequestLogDao()
-        _aiService.value = AiProviderFactory.create(mode, apiKey, model, geminiApiKey, logDao)
+        _aiService.value = AiProviderFactory.create(
+            mode, apiKey, model, geminiApiKey, logDao,
+            context = context, stateDao = database.conversationStateDao()
+        )
     }
 
     companion object {

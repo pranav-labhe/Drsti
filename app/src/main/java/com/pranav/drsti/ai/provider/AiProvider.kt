@@ -1,6 +1,7 @@
 package com.pranav.drsti.ai.provider
 
 import com.pranav.drsti.database.dao.AIRequestLogDao
+import com.pranav.drsti.database.dao.ConversationStateDao
 import com.pranav.drsti.database.entity.AIRequestLogEntity
 import com.pranav.drsti.model.*
 import com.pranav.drsti.util.HashUtil
@@ -298,6 +299,11 @@ object PanchangCalculator {
 
 // ==================== Mock provider (default, offline, zero-cost) ====================
 
+/**
+ * Deterministic, offline provider. Real positions (via AstroCalc) + basic rule-based 
+ * Jyotish interpretation. Used as the foundation for calculation and as a fallback
+ * for interpretive providers (spec §7).
+ */
 class MockAiProvider : AiAstrologyService {
 
     override suspend fun calculatePlanetaryPositions(
@@ -837,11 +843,20 @@ object AiProviderFactory {
         apiKey: String?,
         model: String,
         geminiApiKey: String? = null,
-        logDao: AIRequestLogDao? = null
-    ): AiAstrologyService = when (mode) {
-        AiMode.MOCK -> MockAiProvider()
-        AiMode.LIVE -> if (apiKey.isNullOrBlank()) MockAiProvider() else OpenAiProvider(apiKey, model, logDao)
-        AiMode.GEMINI -> if (geminiApiKey.isNullOrBlank()) MockAiProvider() else GeminiAiProvider(geminiApiKey, model, logDao)
+        logDao: AIRequestLogDao? = null,
+        context: android.content.Context? = null,
+        stateDao: ConversationStateDao? = null
+    ): AiAstrologyService {
+        val base = MockAiProvider()
+        val offline = if (context != null && stateDao != null) {
+            NativeVedicProvider(base, context, stateDao)
+        } else base
+
+        return when (mode) {
+            AiMode.MOCK -> offline
+            AiMode.LIVE -> if (apiKey.isNullOrBlank()) offline else OpenAiProvider(apiKey, model, logDao)
+            AiMode.GEMINI -> if (geminiApiKey.isNullOrBlank()) offline else GeminiAiProvider(geminiApiKey, model, logDao)
+        }
     }
 }
 
