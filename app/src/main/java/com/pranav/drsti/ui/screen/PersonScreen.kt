@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -77,6 +78,7 @@ fun PersonScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
+                    .imePadding()
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -142,18 +144,73 @@ fun PersonScreen(
                 )
 
                 Card(
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                 ) {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(placeState.searchResults, key = { it.id }) { place ->
-                            ListItem(
-                                headlineContent = { Text(place.name) },
-                                supportingContent = { Text("${place.state ?: ""}, ${place.country}") },
-                                trailingContent = { if (selectedPlace?.id == place.id) Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.primary) },
-                                modifier = Modifier.clickable { selectedPlace = place },
-                                colors = ListItemDefaults.colors(containerColor = if (selectedPlace?.id == place.id) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else Color.Transparent)
-                            )
+                    Column {
+                        if (placeState.searchResults.isEmpty() && placeState.query.isNotBlank() && !placeState.isSearchingOnline && placeState.onlineResults.isEmpty()) {
+                            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                Button(onClick = { placeViewModel.searchOnline() }) {
+                                    Icon(Icons.Default.Search, null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Search '${placeState.query}' Online")
+                                }
+                            }
+                        }
+
+                        if (placeState.isSearchingOnline) {
+                            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            }
+                        }
+
+                        LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f, fill = false)) {
+                            // Local Results
+                            if (placeState.searchResults.isNotEmpty()) {
+                                item { Text("Local Matches", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(16.dp, 8.dp, 16.dp, 4.dp)) }
+                                items(placeState.searchResults, key = { "local_${it.id}" }) { place ->
+                                    ListItem(
+                                        headlineContent = { Text(place.name) },
+                                        supportingContent = { Text("${place.state ?: ""}, ${place.country}") },
+                                        trailingContent = { if (selectedPlace?.id == place.id) Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) },
+                                        modifier = Modifier.clickable { selectedPlace = place },
+                                        colors = ListItemDefaults.colors(containerColor = if (selectedPlace?.id == place.id) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else Color.Transparent)
+                                    )
+                                }
+                            }
+
+                            // Online Results
+                            if (placeState.onlineResults.isNotEmpty()) {
+                                item { 
+                                    Row(Modifier.fillMaxWidth().padding(16.dp, 8.dp, 16.dp, 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text("Online Results (Google)", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                                        TextButton(onClick = { placeViewModel.searchOnline() }, contentPadding = PaddingValues(0.dp)) {
+                                            Text("Refresh", style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
+                                }
+                                items(placeState.onlineResults) { place ->
+                                    ListItem(
+                                        headlineContent = { Text(place.name) },
+                                        supportingContent = { Text("${place.state ?: ""}, ${place.country} (Lat: ${place.latitude}, Lon: ${place.longitude})") },
+                                        trailingContent = { 
+                                            IconButton(onClick = { 
+                                                placeViewModel.save(place) { id -> 
+                                                    selectedPlace = place.copy(id = id)
+                                                }
+                                            }) {
+                                                Icon(Icons.Default.Add, "Save and select")
+                                            }
+                                        },
+                                        modifier = Modifier.clickable { 
+                                            placeViewModel.save(place) { id -> 
+                                                selectedPlace = place.copy(id = id)
+                                            }
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = if (selectedPlace?.latitude == place.latitude && selectedPlace?.longitude == place.longitude) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else Color.Transparent)
+                                    )
+                                }
+                            }
                         }
                     }
                 }

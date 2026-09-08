@@ -45,9 +45,15 @@ fun PlaceScreen(
                     }
                 }
             )
-        }
+        },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { padding ->
-        Column(modifier = modifier.fillMaxSize().padding(padding)) {
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(padding)
+                .imePadding()
+        ) {
             Surface(
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 2.dp,
@@ -64,7 +70,12 @@ fun PlaceScreen(
             }
 
             if (showAdd) {
-                AddPlaceForm(onSave = { entity -> viewModel.save(entity) { showAdd = false } })
+                AddPlaceForm(
+                    isSearchingOnline = state.isSearchingOnline,
+                    onlineResults = state.onlineResults,
+                    onSearchOnline = { viewModel.searchOnline() },
+                    onSave = { entity -> viewModel.save(entity) { showAdd = false } }
+                )
             }
 
             LazyColumn(
@@ -111,7 +122,12 @@ private fun PlaceItem(place: PlaceEntity, onDelete: () -> Unit) {
 }
 
 @Composable
-private fun AddPlaceForm(onSave: (PlaceEntity) -> Unit) {
+private fun AddPlaceForm(
+    isSearchingOnline: Boolean,
+    onlineResults: List<PlaceEntity>,
+    onSearchOnline: () -> Unit,
+    onSave: (PlaceEntity) -> Unit
+) {
     var name by remember { mutableStateOf("") }
     var lat by remember { mutableStateOf("") }
     var lon by remember { mutableStateOf("") }
@@ -122,7 +138,42 @@ private fun AddPlaceForm(onSave: (PlaceEntity) -> Unit) {
         shape = ShapeDefaults.Large
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Add New Location", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Add New Location", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                if (isSearchingOnline) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                } else {
+                    TextButton(onClick = onSearchOnline) {
+                        Icon(Icons.Default.Search, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Search Online")
+                    }
+                }
+            }
+
+            if (onlineResults.isNotEmpty()) {
+                Text("Online Suggestions", style = MaterialTheme.typography.labelSmall)
+                onlineResults.take(3).forEach { place ->
+                    OutlinedCard(
+                        onClick = {
+                            name = place.name
+                            lat = place.latitude.toString()
+                            lon = place.longitude.toString()
+                            tz = place.timezone
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(place.name, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                Text("${place.state ?: ""}, ${place.country}", style = MaterialTheme.typography.labelSmall)
+                            }
+                            Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            }
             
             OutlinedTextField(
                 value = name, onValueChange = { name = it },
@@ -174,7 +225,7 @@ private fun PlaceScreenPreview() {
     DrshtiTheme {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             PlaceItem(place = PreviewSamples.place, onDelete = {})
-            AddPlaceForm(onSave = {})
+            AddPlaceForm(isSearchingOnline = false, onlineResults = emptyList(), onSearchOnline = {}, onSave = {})
         }
     }
 }
