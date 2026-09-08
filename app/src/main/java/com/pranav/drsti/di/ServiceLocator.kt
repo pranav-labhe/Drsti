@@ -53,7 +53,9 @@ class ServiceLocator(private val context: Context) {
     private val _aiService = MutableStateFlow<AiAstrologyService>(
         AiProviderFactory.create(
             AiMode.MOCK, apiKey = null, model = "gpt-4o-mini",
-            logDao = database.aiRequestLogDao(), context = context, stateDao = database.conversationStateDao()
+            logDao = database.aiRequestLogDao(), context = context, stateDao = database.conversationStateDao(),
+            decisionRepository = decisionRepository,
+            personRepository = personRepository
         )
     )
     val aiService: StateFlow<AiAstrologyService> = _aiService
@@ -75,7 +77,9 @@ class ServiceLocator(private val context: Context) {
         val logDao = database.aiRequestLogDao()
         _aiService.value = AiProviderFactory.create(
             mode, apiKey, model, geminiApiKey, logDao,
-            context = context, stateDao = database.conversationStateDao()
+            context = context, stateDao = database.conversationStateDao(),
+            decisionRepository = decisionRepository,
+            personRepository = personRepository
         )
     }
 

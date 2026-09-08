@@ -12,7 +12,9 @@ data class ConversationState(
     val activeDecisionId: Long? = null,
     val languagePreference: String = "en",
     val detailLevel: DetailLevel = DetailLevel.SUMMARY,
-    val lastFactsSnapshot: String? = null // JSON snapshot of relevant Jyotish facts for follow-ups
+    val lastIntent: String? = null,
+    val lastActiveEntityId: String? = null, // e.g. "option_A"
+    val lastFactsSnapshot: String? = null // Reference to key facts for follow-ups
 )
 
 @Serializable

@@ -1,6 +1,10 @@
 package com.pranav.drsti.ai.provider
 
 import com.pranav.drsti.ai.NativeIntelligenceCoordinator
+import com.pranav.drsti.ai.provider.VedicInferenceEngine
+import com.pranav.drsti.ai.provider.ResponseRenderer
+import com.pranav.drsti.data.repository.DecisionRepository
+import com.pranav.drsti.data.repository.PersonRepository
 import com.pranav.drsti.database.dao.ConversationStateDao
 import com.pranav.drsti.database.entity.ConversationStateEntity
 import com.pranav.drsti.model.*
@@ -18,22 +22,30 @@ import java.time.Instant
 class NativeVedicProvider(
     private val base: MockAiProvider,
     private val context: android.content.Context,
-    private val stateDao: ConversationStateDao
+    private val stateDao: ConversationStateDao,
+    private val decisionRepository: DecisionRepository,
+    private val personRepository: PersonRepository
 ) : AiAstrologyService by base {
 
-    private val coordinator = NativeIntelligenceCoordinator(context)
+    private val coordinator = NativeIntelligenceCoordinator(context, decisionRepository, personRepository)
 
     override suspend fun analyzeDecision(context: AiRequestContext, request: DecisionRequest): DecisionAnalysis = withContext(Dispatchers.Default) {
         val dasha = context.dasha
         val lang = "en" 
 
         val options = request.options.mapIndexed { idx, opt ->
-            val summary = VedicInferenceEngine.synthesize(context, DetailLevel.SUMMARY, lang)
+            // Use VedicInferenceEngine for deeper scoring
+            val findings = VedicInferenceEngine.evaluate(context)
+            val summary = ResponseRenderer.render(findings, DetailLevel.SUMMARY, lang)
+            
+            val baseSupport = 60 // Baseline for valid Jyotish data
+            val findingsDelta = findings.sumOf { it.supportDelta }
+            
             val seed = (HashUtil.sha256(opt.description + (dasha?.currentMahadasha?.planet?.name ?: "")).take(6).sumOf { it.code })
-            val baseScore = 50 + (seed % 30)
-            val boost = if (opt.description.lowercase().contains("wait") || opt.description.lowercase().contains("later")) -10 else 5
-            val astro = (baseScore + boost).coerceIn(15, 95)
-            val timing = (baseScore + (idx * 2)).coerceIn(15, 95)
+            val noise = (seed % 10) - 5 // Small deterministic noise (-5 to +5)
+            
+            val astro = (baseSupport + findingsDelta + noise).coerceIn(15, 95)
+            val timing = (baseSupport + findingsDelta + (idx * 2)).coerceIn(15, 95)
             
             val strength = when {
                 astro >= 76 -> "very strong"
@@ -48,17 +60,11 @@ class NativeVedicProvider(
                 astrologicalSupport = astro,
                 timingSupport = timing,
                 strength = strength,
-                strengths = listOfNotNull(
-                    if (astro >= 65) "The current planetary configuration provides robust structural support for this path." else null,
-                    if (dasha?.currentAntardasha?.planet == PlanetName.JUPITER) "Jupiter's sub-period favors growth and expansion." else null
-                ),
-                concerns = listOfNotNull(
-                    if (astro < 45) "Fewer supporting factors; this path may require significantly more effort." else null,
-                    if (context.planetaryPositions?.positions?.any { it.planet == PlanetName.SATURN && it.isRetrograde } == true) "Saturn's retrograde suggests a need to review long-term commitments first." else null
-                ),
-                supportingFactors = listOf("Favorable Dasha Lord influence", "Supportive house placement"),
+                strengths = findings.filter { it.supportDelta > 0 }.map { ResponseRenderer.render(listOf(it), DetailLevel.SUMMARY, lang) },
+                concerns = findings.filter { it.supportDelta < 0 }.map { ResponseRenderer.render(listOf(it), DetailLevel.SUMMARY, lang) },
+                supportingFactors = listOf("Consistent with local Vedic laws"),
                 contradictingFactors = emptyList(),
-                explanation = "Based on local Vedic laws, \"${opt.description}\" shows $strength astrological support. $summary"
+                explanation = "Based on local expert rules, \"${opt.description}\" shows $strength alignment. $summary"
             )
         }
 
@@ -83,7 +89,7 @@ class NativeVedicProvider(
         val currentState = entity?.let {
             ConversationState(
                 it.conversationId, it.activeTopic, it.activeDecisionId, it.languagePreference,
-                DetailLevel.valueOf(it.detailLevel), it.lastFactsSnapshot
+                DetailLevel.valueOf(it.detailLevel), it.lastIntent, it.lastActiveEntityId, it.lastFactsSnapshot
             )
         } ?: ConversationState(conversationId)
 
@@ -92,6 +98,7 @@ class NativeVedicProvider(
         stateDao.upsert(ConversationStateEntity(
             updatedState.conversationId, updatedState.activeTopic, updatedState.activeDecisionId,
             updatedState.languagePreference, updatedState.detailLevel.name,
+            updatedState.lastIntent, updatedState.lastActiveEntityId,
             updatedState.lastFactsSnapshot, Instant.now().toString()
         ))
 

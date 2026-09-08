@@ -42,6 +42,8 @@ class ChatRepository(
         activeDecisionId = activeDecisionId,
         languagePreference = languagePreference,
         detailLevel = DetailLevel.valueOf(detailLevel),
+        lastIntent = lastIntent,
+        lastActiveEntityId = lastActiveEntityId,
         lastFactsSnapshot = lastFactsSnapshot
     )
 
@@ -51,6 +53,8 @@ class ChatRepository(
         activeDecisionId = activeDecisionId,
         languagePreference = languagePreference,
         detailLevel = detailLevel.name,
+        lastIntent = lastIntent,
+        lastActiveEntityId = lastActiveEntityId,
         lastFactsSnapshot = lastFactsSnapshot,
         updatedAt = Instant.now().toString()
     )

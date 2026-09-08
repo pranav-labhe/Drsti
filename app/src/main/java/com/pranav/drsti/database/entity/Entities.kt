@@ -210,6 +210,8 @@ data class ConversationStateEntity(
     val activeDecisionId: Long?,
     val languagePreference: String,
     val detailLevel: String,
+    val lastIntent: String?,
+    val lastActiveEntityId: String?,
     val lastFactsSnapshot: String?,
     val updatedAt: String
 )
