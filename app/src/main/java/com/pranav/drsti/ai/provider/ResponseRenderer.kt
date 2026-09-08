@@ -17,6 +17,9 @@ object ResponseRenderer {
 
         val sb = StringBuilder()
         
+        // Orchestrated Delivery: Intro -> Key Finding -> Practical Implication -> Encouragement
+        sb.append(getIntro(language)).append(" ")
+
         // 1. Theme (Overarching vibe)
         findings.firstOrNull { it.category == FindingCategory.THEME }?.let {
             sb.append(getThemeText(it.key, language)).append(" ")
@@ -47,6 +50,12 @@ object ResponseRenderer {
         }
 
         return sb.toString().trim()
+    }
+
+    private fun getIntro(lang: String) = when (lang) {
+        "hi" -> "मैंने आपके चार्ट का सावधानीपूर्वक विश्लेषण किया है।"
+        "mr" -> "मी तुमच्या कुंडलीचे काळजीपूर्वक विश्लेषण केले आहे."
+        else -> "I have carefully analyzed your chart."
     }
 
     private fun getEmptyStateText(lang: String) = when (lang) {

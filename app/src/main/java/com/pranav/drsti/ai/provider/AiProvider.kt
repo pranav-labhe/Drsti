@@ -4,6 +4,7 @@ import com.pranav.drsti.database.dao.AIRequestLogDao
 import com.pranav.drsti.database.dao.ConversationStateDao
 import com.pranav.drsti.data.repository.DecisionRepository
 import com.pranav.drsti.data.repository.PersonRepository
+import com.pranav.drsti.ai.SemanticIntelligenceManager
 import com.pranav.drsti.database.entity.AIRequestLogEntity
 import com.pranav.drsti.model.*
 import com.pranav.drsti.util.HashUtil
@@ -849,11 +850,12 @@ object AiProviderFactory {
         context: android.content.Context? = null,
         stateDao: ConversationStateDao? = null,
         decisionRepository: DecisionRepository? = null,
-        personRepository: PersonRepository? = null
+        personRepository: PersonRepository? = null,
+        semanticManager: SemanticIntelligenceManager? = null
     ): AiAstrologyService {
         val base = MockAiProvider()
-        val offline = if (context != null && stateDao != null && decisionRepository != null && personRepository != null) {
-            NativeVedicProvider(base, context, stateDao, decisionRepository, personRepository)
+        val offline = if (context != null && stateDao != null && decisionRepository != null && personRepository != null && semanticManager != null) {
+            NativeVedicProvider(base, context, stateDao, decisionRepository, personRepository, semanticManager)
         } else base
 
         return when (mode) {

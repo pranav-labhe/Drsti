@@ -94,6 +94,7 @@ class ChatRepository(
     }
 
     suspend fun deleteConversation(id: Long) {
+        stateDao.deleteByConversationId(id)
         messageDao.deleteAllForConversation(id)
         conversationDao.deleteById(id)
     }

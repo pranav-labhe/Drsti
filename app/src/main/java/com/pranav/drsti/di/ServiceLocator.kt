@@ -1,6 +1,7 @@
 package com.pranav.drsti.di
 
 import android.content.Context
+import com.pranav.drsti.ai.SemanticIntelligenceManager
 import com.pranav.drsti.ai.provider.AiAstrologyService
 import com.pranav.drsti.ai.provider.AiMode
 import com.pranav.drsti.ai.provider.AiProviderFactory
@@ -41,6 +42,11 @@ class ServiceLocator(private val context: Context) {
         database.conversationMessageDao(),
         database.conversationStateDao()
     )
+
+    private val semanticIntelligenceManager: SemanticIntelligenceManager by lazy {
+        SemanticIntelligenceManager(context)
+    }
+
     val decisionRepository: DecisionRepository = DecisionRepository(
         database.decisionDao(),
         database.decisionAnalysisDao(),
@@ -55,7 +61,8 @@ class ServiceLocator(private val context: Context) {
             AiMode.MOCK, apiKey = null, model = "gpt-4o-mini",
             logDao = database.aiRequestLogDao(), context = context, stateDao = database.conversationStateDao(),
             decisionRepository = decisionRepository,
-            personRepository = personRepository
+            personRepository = personRepository,
+            semanticManager = semanticIntelligenceManager
         )
     )
     val aiService: StateFlow<AiAstrologyService> = _aiService
@@ -79,7 +86,8 @@ class ServiceLocator(private val context: Context) {
             mode, apiKey, model, geminiApiKey, logDao,
             context = context, stateDao = database.conversationStateDao(),
             decisionRepository = decisionRepository,
-            personRepository = personRepository
+            personRepository = personRepository,
+            semanticManager = semanticIntelligenceManager
         )
     }
 

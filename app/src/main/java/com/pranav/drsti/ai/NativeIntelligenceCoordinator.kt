@@ -1,10 +1,7 @@
 package com.pranav.drsti.ai
 
 import android.content.Context
-import android.view.textclassifier.TextClassificationManager
-import android.view.textclassifier.TextClassifier
 import com.pranav.drsti.ai.provider.VedicInferenceEngine
-import com.pranav.drsti.ai.provider.ResponseRenderer
 import com.pranav.drsti.data.repository.DecisionRepository
 import com.pranav.drsti.data.repository.PersonRepository
 import com.pranav.drsti.model.*
@@ -17,13 +14,9 @@ import java.time.Instant
 class NativeIntelligenceCoordinator(
     private val context: Context,
     private val decisionRepository: DecisionRepository,
-    private val personRepository: PersonRepository
+    private val personRepository: PersonRepository,
+    private val semanticManager: SemanticIntelligenceManager
 ) {
-
-    private val textClassifier: TextClassifier by lazy {
-        val manager = context.getSystemService(TextClassificationManager::class.java)
-        manager?.textClassifier ?: TextClassifier.NO_OP
-    }
 
     /**
      * Processes a user message offline and returns a reply.
@@ -34,9 +27,11 @@ class NativeIntelligenceCoordinator(
         state: ConversationState
     ): Pair<ChatReply, ConversationState> {
         val m = userMessage.lowercase()
-        val intent = IntentResolver.resolve(userMessage, state)
         
-        // 1. Resolve Language Preference
+        // 1. Resolve Intent via SLM (Domain Guarding)
+        val resolvedIntent = resolveIntent(userMessage, state)
+        
+        // 2. Resolve Language Preference
         val updatedLanguage = when {
             "hindi" in m || "हिंदी" in userMessage -> "hi"
             "marathi" in m || "मराठी" in userMessage -> "mr"
@@ -44,22 +39,21 @@ class NativeIntelligenceCoordinator(
             else -> state.languagePreference
         }
 
-        // 2. Resolve Detail Level & Specialized Domains
-        var finalDetailLevel = if (intent == ResolvedIntent.ELABORATE) DetailLevel.ELABORATE else state.detailLevel
+        // 3. Resolve Detail Level & Specialized Domains
+        var finalDetailLevel = if (resolvedIntent == ResolvedIntent.ELABORATE) DetailLevel.ELABORATE else state.detailLevel
         if ("financially" in m || "money" in m || "पैसे" in m) {
-            finalDetailLevel = DetailLevel.ELABORATE // Domain-specific follow-ups trigger elaboration
+            finalDetailLevel = DetailLevel.ELABORATE 
         }
 
-        // 3. Resolve Topic & Decision Context (Repository Linkage & Pronoun Resolution)
+        // 4. Resolve Topic & Decision Context (Repository Linkage & Pronoun Resolution)
         var activeDecisionId = state.activeDecisionId
         var resolvedTopic = state.activeTopic
         var lastActiveEntityId = state.lastActiveEntityId
         
-        when (intent) {
+        when (resolvedIntent) {
             ResolvedIntent.DECISION_START -> {
                 val topic = extractDecisionTopic(userMessage)
                 resolvedTopic = topic
-                // Auto-save new decision to repository
                 val person = personRepository.observeActive().firstOrNull()
                 if (person != null) {
                     activeDecisionId = decisionRepository.createDecision(
@@ -78,13 +72,12 @@ class NativeIntelligenceCoordinator(
                     val decision = decisionRepository.getDecision(activeDecisionId)
                     resolvedTopic = decision?.question ?: state.activeTopic
                     
-                    // Update decision with new options if found
                     val newOptions = extractOptions(userMessage)
                     if (newOptions.isNotEmpty() && decision != null) {
                         decisionRepository.createDecision(
                             personId = decision.personId,
                             question = decision.question,
-                            options = newOptions, // createDecision handles merging/updating internally
+                            options = newOptions,
                             context = decision.context,
                             desiredDate = decision.desiredDecisionDateIso,
                             aiContext = context,
@@ -94,46 +87,42 @@ class NativeIntelligenceCoordinator(
                 }
             }
             ResolvedIntent.FOLLOW_UP -> {
-                // Pronoun resolution logic: "it", "that", "this"
                 val isPronounFollowUp = listOf("it", "that", "this", "it's").any { it in m }
                 if (isPronounFollowUp && activeDecisionId != null) {
                     val decision = decisionRepository.getDecision(activeDecisionId)
                     resolvedTopic = decision?.question ?: state.activeTopic
                 }
                 
-                // Entity mapping: "the first one", "other one"
                 if ("first one" in m) lastActiveEntityId = "option_1"
                 if ("other one" in m || "second one" in m) lastActiveEntityId = "option_2"
             }
             else -> {}
         }
 
-        // 4. Execute Structured Reasoning
+        // 5. Execute Structured Reasoning and SLM-Driven Synthesis
         val findings = VedicInferenceEngine.evaluate(context)
-        val responseText = ResponseRenderer.render(
-            findings,
-            finalDetailLevel,
-            updatedLanguage
-        )
+        
+        // Use SLM for "Better Wordings"
+        val responseText = semanticManager.synthesizeInterpretation(findings, updatedLanguage)
 
-        // 5. Update Persisted State
+        // 6. Update Persisted State
         val updatedState = state.copy(
             activeTopic = resolvedTopic,
             activeDecisionId = activeDecisionId,
             languagePreference = updatedLanguage,
             detailLevel = finalDetailLevel,
-            lastIntent = intent.name,
+            lastIntent = resolvedIntent.name,
             lastActiveEntityId = lastActiveEntityId,
             lastFactsSnapshot = "Findings:${findings.size}"
         )
 
         val reply = ChatReply(
             text = responseText,
-            intent = "OFFLINE_${intent.name}",
+            intent = "OFFLINE_${resolvedIntent.name}",
             provenance = Provenance(
                 calculationVersion = "astrocalc-1.0",
                 generatedAt = Instant.now().toString(),
-                source = "NativeExpertSystem",
+                source = "SmolLM2-135M",
                 sourceVersion = "1.0",
                 inputHash = "",
                 outputHash = ""
@@ -141,6 +130,14 @@ class NativeIntelligenceCoordinator(
         )
 
         return reply to updatedState
+    }
+
+    private suspend fun resolveIntent(message: String, state: ConversationState): ResolvedIntent {
+        val m = message.lowercase()
+        if ("elaborate" in m || "विस्तार" in m) return ResolvedIntent.ELABORATE
+        if ("translate" in m || "भाषा" in m) return ResolvedIntent.TRANSLATE
+        
+        return semanticManager.classifyIntent(message)
     }
 
     private fun extractDecisionTopic(message: String): String? {

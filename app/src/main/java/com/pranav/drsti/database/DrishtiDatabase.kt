@@ -5,6 +5,8 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.pranav.drsti.database.dao.*
 import com.pranav.drsti.database.entity.*
 
@@ -55,13 +57,51 @@ abstract class DrishtiDatabase : RoomDatabase() {
     companion object {
         @Volatile private var instance: DrishtiDatabase? = null
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `conversation_state` (
+                        `conversationId` INTEGER NOT NULL, 
+                        `activeTopic` TEXT, 
+                        `activeDecisionId` INTEGER, 
+                        `languagePreference` TEXT NOT NULL, 
+                        `detailLevel` TEXT NOT NULL, 
+                        `lastFactsSnapshot` TEXT, 
+                        `updatedAt` TEXT NOT NULL, 
+                        PRIMARY KEY(`conversationId`)
+                    )
+                """.trimIndent())
+            }
+        }
+
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `calibration_stats` (
+                        `id` INTEGER NOT NULL, 
+                        `decisionsAnalyzed` INTEGER NOT NULL, 
+                        `outcomesRecorded` INTEGER NOT NULL, 
+                        `directionallyCorrect` INTEGER NOT NULL, 
+                        `overconfidenceCount` INTEGER NOT NULL, 
+                        `underconfidenceCount` INTEGER NOT NULL, 
+                        `updatedAt` TEXT NOT NULL, 
+                        PRIMARY KEY(`id`)
+                    )
+                """.trimIndent())
+                
+                // Add new columns to conversation_state if they don't exist
+                runCatching { db.execSQL("ALTER TABLE conversation_state ADD COLUMN lastIntent TEXT") }
+                runCatching { db.execSQL("ALTER TABLE conversation_state ADD COLUMN lastActiveEntityId TEXT") }
+            }
+        }
+
         fun getInstance(context: Context): DrishtiDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     DrishtiDatabase::class.java,
                     "drsti.db"
-                ).fallbackToDestructiveMigration()
+                ).addMigrations(MIGRATION_2_3, MIGRATION_3_4)
                  .build().also { instance = it }
             }
     }

@@ -55,10 +55,13 @@ class DecisionRepository(
         val existing = decisionDao.getByQuestion(personId, question)
         
         val id = if (existing != null) {
-            // Update existing decision with potentially new data
+            // MERGE Logic: Add new options to existing ones without duplicates
+            val existingOptions: List<DecisionOptionInput> = json.decodeFromString(existing.optionsJson)
+            val mergedOptions = (existingOptions + options).distinctBy { it.description }
+            
             val updated = existing.copy(
-                optionsJson = json.encodeToString(options),
-                context = context,
+                optionsJson = json.encodeToString(mergedOptions),
+                context = context ?: existing.context,
                 conversationId = conversationId ?: existing.conversationId,
                 desiredDecisionDateIso = desiredDate ?: existing.desiredDecisionDateIso
             )
@@ -78,12 +81,11 @@ class DecisionRepository(
             decisionDao.insert(decision)
         }
 
-        // Run fresh analysis (consistency for Form, Chat Save, and Refresh)
+        // Run fresh analysis
         val analysis = aiServiceProvider().analyzeDecision(aiContext, DecisionRequest(question, options, context))
         
-        val existingAnalysis = analysisDao.getLatestForDecision(id)
+        // IMMUTABILITY Logic: Always INSERT a new analysis record to preserve history
         val analysisEntity = DecisionAnalysisEntity(
-            id = existingAnalysis?.id ?: 0L,
             decisionId = id,
             analysisJson = json.encodeToString(analysis),
             natalSnapshotJson = aiContext.kundali?.let { json.encodeToString(it) },
@@ -97,12 +99,11 @@ class DecisionRepository(
             analysisTimestamp = now
         )
 
-        if (existingAnalysis != null) {
-            analysisDao.update(analysisEntity)
-        } else {
-            analysisDao.insert(analysisEntity)
-            
-            // Increment analyzed count for new decisions
+        analysisDao.insert(analysisEntity)
+        
+        // Increment analyzed count for new decisions if this is the first analysis
+        val analysesCount = analysisDao.getAll().count { it.decisionId == id }
+        if (analysesCount == 1) {
             val current = calibrationDao.getGlobal() ?: CalibrationStatsEntity(
                 decisionsAnalyzed = 0, outcomesRecorded = 0, directionallyCorrect = 0,
                 overconfidenceCount = 0, underconfidenceCount = 0, updatedAt = Instant.now().toString()
@@ -112,6 +113,7 @@ class DecisionRepository(
                 updatedAt = Instant.now().toString()
             ))
         }
+
         return id
     }
 
