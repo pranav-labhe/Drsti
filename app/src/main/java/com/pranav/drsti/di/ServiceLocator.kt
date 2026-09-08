@@ -33,7 +33,7 @@ class ServiceLocator(context: Context) {
 
     val settingsRepository: SettingsRepository = SettingsRepository(database.appSettingsDao())
     val personRepository: PersonRepository = PersonRepository(database.personDao())
-    val placeRepository: PlaceRepository = PlaceRepository(database.placeDao()).also {
+    val placeRepository: PlaceRepository = PlaceRepository(context, database.placeDao()).also {
         applicationScope.launch { it.seedDefaultPlacesIfEmpty() }
     }
     val chatRepository: ChatRepository = ChatRepository(database.conversationDao(), database.conversationMessageDao())
