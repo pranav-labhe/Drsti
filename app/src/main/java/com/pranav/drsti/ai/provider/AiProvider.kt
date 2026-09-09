@@ -3,6 +3,7 @@ package com.pranav.drsti.ai.provider
 import com.pranav.drsti.database.dao.AIRequestLogDao
 import com.pranav.drsti.database.entity.AIRequestLogEntity
 import com.pranav.drsti.model.*
+import android.content.Context
 import com.pranav.drsti.util.HashUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -57,6 +58,7 @@ interface AiAstrologyService {
     suspend fun analyzeDecision(context: AiRequestContext, request: DecisionRequest): DecisionAnalysis
     suspend fun analyzeOutcome(originalAnalysis: DecisionAnalysis, outcome: OutcomeInput): OutcomeAnalysis
     suspend fun chat(context: AiRequestContext, userMessage: String, conversationId: Long? = null): ChatReply
+    fun close() {}
 }
 
 private const val CALC_VERSION = "astrocalc-1.0"
@@ -505,6 +507,7 @@ class MockAiProvider : AiAstrologyService {
     }
 
     override suspend fun chat(context: AiRequestContext, userMessage: String, conversationId: Long?): ChatReply = withContext(Dispatchers.Default) {
+        android.util.Log.d("MockAiProvider", "Generating deterministic response (Intent: ${IntentRecognizer.recognize(userMessage)})")
         val intent = IntentRecognizer.recognize(userMessage)
         
         val panchangInfo = context.panchang?.let {
@@ -833,13 +836,14 @@ private data class OpenAiChatResponse(val choices: List<OpenAiChoice> = emptyLis
 
 object AiProviderFactory {
     fun create(
+        context: Context,
         mode: AiMode,
         apiKey: String?,
         model: String,
         geminiApiKey: String? = null,
         logDao: AIRequestLogDao? = null
     ): AiAstrologyService = when (mode) {
-        AiMode.MOCK -> MockAiProvider()
+        AiMode.MOCK -> LocalAiProvider(context, logDao)
         AiMode.LIVE -> if (apiKey.isNullOrBlank()) MockAiProvider() else OpenAiProvider(apiKey, model, logDao)
         AiMode.GEMINI -> if (geminiApiKey.isNullOrBlank()) MockAiProvider() else GeminiAiProvider(geminiApiKey, model, logDao)
     }

@@ -48,6 +48,10 @@ android {
         compose = true
     }
 
+    androidResources {
+        noCompress += listOf("bin", "task")
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -79,7 +83,10 @@ dependencies {
     ksp(libs.androidx.room.compiler)
 
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.mediapipe.genai)
+    implementation(libs.mlkit.translate)
 
     implementation(libs.retrofit.core)
     implementation(libs.retrofit.kotlinx.serialization)
