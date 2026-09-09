@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
  * instance and hands it down through composition locals / constructor
  * params — see ui/app/DrishtiApp.kt.
  */
-class ServiceLocator(context: Context) {
+class ServiceLocator(private val context: Context) {
 
     val applicationScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -46,7 +46,7 @@ class ServiceLocator(context: Context) {
     )
 
     private val _aiService = MutableStateFlow<AiAstrologyService>(
-        AiProviderFactory.create(AiMode.MOCK, apiKey = null, model = "gpt-4o-mini", logDao = database.aiRequestLogDao())
+        AiProviderFactory.create(context, AiMode.MOCK, apiKey = null, model = "gpt-4o-mini", logDao = database.aiRequestLogDao())
     )
     val aiService: StateFlow<AiAstrologyService> = _aiService
 
@@ -65,7 +65,11 @@ class ServiceLocator(context: Context) {
         val apiKey = secureStorage.getApiKey()
         val geminiApiKey = secureStorage.getGeminiApiKey()
         val logDao = database.aiRequestLogDao()
-        _aiService.value = AiProviderFactory.create(mode, apiKey, model, geminiApiKey, logDao)
+        
+        // Close old service to free resources (especially for LocalAiProvider)
+        _aiService.value.close()
+        
+        _aiService.value = AiProviderFactory.create(context, mode, apiKey, model, geminiApiKey, logDao)
     }
 
     companion object {
