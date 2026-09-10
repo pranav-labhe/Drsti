@@ -1,0 +1,63 @@
+{
+  "IDENTITY": [
+    "moon sign", "birth chart", "my sign", "ascendant",
+    "rashi", "kundali", "lagna", "nakshatra", "graha",
+    "raashi", "rasi", "kundli", "kundalee",
+    "राशि", "कुंडली"
+  ],
+  "CAREER": [
+    "career", "work", "job", "promotion", "business", "salary", "naukri",
+    "profession", "office"
+  ],
+  "ROMANCE": [
+    "romance", "marriage", "partner", "love", "relationship",
+    "compatible", "match", "better for me", "milan"
+  ],
+  "TIMING": [
+    "timing", "dasha", "future", "period", "phase",
+    "when will", "how long", "bad time", "get better", "will it end", "kab tak",
+    "will i", "am i going to", "chances of", "kya hoga",
+    "is it good", "should i", "right time", "auspicious", "shubh",
+    "dasa", "दशा"
+  ],
+  "VIBE": [
+    "vibe", "today", "panchang", "feel", "mood", "energy", "vibe today"
+  ],
+  "_intent_frames": [
+    {
+      "frame": "TEMPORAL_RELIEF",
+      "phrases": ["when will", "how long", "bad time", "get better", "will it end", "kab tak"],
+      "concept": "TIMING"
+    },
+    {
+      "frame": "OUTCOME",
+      "phrases": ["will i", "am i going to", "chances of", "kya hoga"],
+      "concept": "TIMING"
+    },
+    {
+      "frame": "EVALUATIVE",
+      "phrases": ["is it good", "should i", "right time", "auspicious", "shubh"],
+      "concept": "TIMING"
+    },
+    {
+      "frame": "COMPATIBILITY",
+      "phrases": ["compatible", "match", "better for me", "milan"],
+      "concept": "ROMANCE"
+    },
+    {
+      "frame": "SELF_DESCRIPTIVE",
+      "phrases": ["am i", "my nature", "why do i", "what kind of person"],
+      "concept": "IDENTITY"
+    },
+    {
+      "frame": "WORK",
+      "phrases": ["job", "promotion", "business", "salary", "naukri"],
+      "concept": "CAREER"
+    },
+    {
+      "frame": "FEELING",
+      "phrases": ["feel", "mood", "energy", "vibe today"],
+      "concept": "VIBE"
+    }
+  ]
+}

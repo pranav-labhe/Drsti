@@ -3,19 +3,15 @@ package com.pranav.drsti.ai.provider
 import android.content.Context
 import android.util.Log
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
+import com.pranav.drsti.ai.resolver.AstroTermResolver
+import com.pranav.drsti.ai.resolver.FactFormatter
 import com.pranav.drsti.ai.util.AstroModelManager
 import com.pranav.drsti.ai.util.AstroTranslationService
 import com.pranav.drsti.database.dao.AIRequestLogDao
 import com.pranav.drsti.database.entity.AIRequestLogEntity
 import com.pranav.drsti.model.*
 import com.pranav.drsti.util.HashUtil
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import kotlinx.coroutines.*
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -40,6 +36,11 @@ class LocalAiProvider(
     private var llmInference: LlmInference? = null
     private val isInitializing = AtomicBoolean(false)
 
+    // Task 5: Budget and Prompt constants
+    private val MAX_PROMPT_TOKENS = 200
+    private val GREETINGS = setOf("hi", "hello", "hey", "thanks", "thank you", "ok", "bye", "namaste")
+    private val STOPWORDS = setOf("this", "that", "with", "from", "your", "have", "been", "will", "they", "asked")
+
     init {
         initializeLlm()
     }
@@ -50,12 +51,14 @@ class LocalAiProvider(
         GlobalScope.launch(Dispatchers.IO) {
             try {
                 Log.d(TAG, "Starting Local LLM initialization...")
+                AstroTermResolver.initialize(context) // Task 2
+
                 val modelPath = AstroModelManager.getOrExtractModel(context)
                 if (modelPath != null && java.io.File(modelPath).exists()) {
                     try {
                         val options = LlmInference.LlmInferenceOptions.builder()
                             .setModelPath(modelPath)
-                            .setMaxTokens(1024)
+                            .setMaxTokens(1065) // Task 7
                             .build()
                         llmInference = LlmInference.createFromOptions(context, options)
                         Log.i(TAG, "Local LLM initialized successfully from $modelPath")
@@ -106,7 +109,6 @@ class LocalAiProvider(
 
         // Lazy retry if not initialized yet
         if (llm == null && !isInitializing.get()) {
-            Log.d(TAG, "LLM null on chat. Retrying initialization...")
             initializeLlm()
         }
 
@@ -127,69 +129,34 @@ class LocalAiProvider(
                 previousId = logDao.getLastInteraction(conversationId)?.interactionId
             }
 
-            // STAGE 1: CONTEXT CONDENSER (Memory)
-            var intent = userMessage
-            if (context.recentMessages.isNotEmpty()) {
-                val stage1Prompt = """
-                    <|im_start|>user
-                    Summarize history and current message into a 5-word intent.
-                    History: ${context.recentMessages.takeLast(2).joinToString("; ")}
-                    Message: $userMessage
-                    Intent: The user wants to<|im_end|>
-                    <|im_start|>assistant
-                """.trimIndent()
-                val stage1Raw = withContext(Dispatchers.Default) { llm.generateResponse(stage1Prompt) }
-                val cleanedIntent = stage1Raw.split("<|im_end|>")[0].trim()
-                if (cleanedIntent.isNotBlank() && !cleanedIntent.contains("?")) {
-                    intent = "The user wants to $cleanedIntent"
-                }
-                Log.d(TAG, "Stage 1 (Intent): $intent")
+            // Task 8: Small-talk short-circuit
+            val normalizedMessage = userMessage.lowercase().trim().replace(Regex("[^a-z\\s]"), "")
+            if (GREETINGS.contains(normalizedMessage)) {
+                val cannedReply = "Namaste! I'm Drishti, your companion. How can I help you see clearly today?"
+                output = cannedReply
+                success = true
+                return createReply(output!!, "SMALL_TALK", startTime, userMessage, "v5-small-talk")
             }
 
-            // STAGE 2: LOGIC DISPATCHER (The "Understanding" Phase)
-            val stage2Prompt = """
-                <|im_start|>user
-                Intent: $intent
-                Pick ONE: IDENTITY, CAREER, ROMANCE, TIMING, VIBE, NONE.
-                Choice:<|im_end|>
-                <|im_start|>assistant
-            """.trimIndent()
+            // Task 4.3: Resolve concepts
+            val concepts = AstroTermResolver.resolve(userMessage)
             
-            val stage2Raw = withContext(Dispatchers.Default) { llm.generateResponse(stage2Prompt) }
-            val tags = stage2Raw.split("<|im_end|>")[0].trim().uppercase().replace(Regex("[^A-Z]"), "")
-            Log.d(TAG, "Stage 2 (Area Tags): $tags")
+            // Task 4.4: Format facts
+            val facts = FactFormatter.format(concepts, context)
+            
+            // Task 5: Build ONE prompt
+            val prompt = buildPrompt(facts, context, userMessage)
+            Log.d(TAG, "Prompt: $prompt")
 
-            // KOTLIN INTEGRATION: Fetch precise interpretation
-            val rawInterpretation = AstroInterpretationRenderer.renderFactsFromTags(tags, context)
-            Log.d(TAG, "Kotlin Logic Result: $rawInterpretation")
-
-            // STAGE 3: VOICE SYNTHESIZER (The "Synonym" Phase)
-            val stage3Prompt = """
-                <|im_start|>user
-                Facts: $rawInterpretation
-                User said: "$userMessage"
-                Friendly AI response:<|im_end|>
-                <|im_start|>assistant
-            """.trimIndent()
-            
-            val stage3Raw = withContext(Dispatchers.Default) { llm.generateResponse(stage3Prompt) }
-            var finalOutput = stage3Raw.split("<|im_end|>")[0].split("<|im_start|>")[0].trim()
-            
-            // If the model gave us nothing or just a prefix, use the raw interpretation directly
-            if (finalOutput.isBlank() || finalOutput.length < 5) {
-                finalOutput = rawInterpretation
+            // Task 4.6 & 7: ONE llm call
+            val rawOutput = withContext(Dispatchers.Default) {
+                llm.generateResponse(prompt)
             }
-            
-            if (finalOutput.startsWith("assistant:", ignoreCase = true)) finalOutput = finalOutput.substringAfter(":").trim()
-            
-            output = finalOutput
-            Log.d(TAG, "AI Result: $finalOutput")
+            Log.d(TAG, "Raw Output: $rawOutput")
 
-            // Last resort safety: If still empty, fall back to mock
-            if (output.isNullOrBlank()) {
-                Log.w(TAG, "AI result is empty after all stages. Falling back to Mock.")
-                return mockFallback.chat(context, userMessage, conversationId)
-            }
+            // Task 6: Validate output
+            output = validateAndCleanOutput(rawOutput, facts)
+            Log.d(TAG, "Validated Output: $output")
 
             // Handle language translation
             val userLang = detectLanguage(userMessage)
@@ -199,33 +166,145 @@ class LocalAiProvider(
 
             success = true
 
-            return ChatReply(
-                text = output!!,
-                intent = "LOCAL_PIPELINE_V4",
-                provenance = Provenance(
-                    calculationVersion = "astrocalc-1.0", promptVersion = "v4-pipeline",
-                    model = "SmolLM2-135M-Instruct", generatedAt = Instant.now().toString(),
-                    source = "LocalAiProvider", sourceVersion = "mediapipe-llm-1.0",
-                    inputHash = HashUtil.sha256(stage3Prompt), outputHash = HashUtil.sha256(output!!)
-                )
-            )
+            return createReply(output!!, "LOCAL_V5_SINGLE_CALL", startTime, prompt, "v5-single-call")
         } catch (e: Exception) {
             errorMsg = e.message ?: "Unknown error"
             Log.e(TAG, "Pipeline error - FALLING BACK", e)
             val reply = mockFallback.chat(context, userMessage, conversationId)
             return reply.copy(text = "[Fallback] ${reply.text}")
         } finally {
-            logDao?.let { dao ->
-                val log = AIRequestLogEntity(
-                    conversationId = conversationId, interactionId = responseId,
-                    previousInteractionId = previousId, requestType = "v4-pipeline",
-                    timestamp = Instant.now().toString(), model = "SmolLM2-135M-Instruct",
-                    promptVersion = "v4-pipeline", inputHash = HashUtil.sha256(userMessage),
-                    outputHash = output?.let { HashUtil.sha256(it) }, success = success, error = errorMsg,
-                    latencyMs = System.currentTimeMillis() - startTime
-                )
-                GlobalScope.launch(Dispatchers.IO) { dao.insert(log) }
+            logChatResult(conversationId, responseId, previousId, "v5-single-call", userMessage, output, success, errorMsg, startTime)
+        }
+    }
+
+    private fun buildPrompt(facts: List<String>, context: AiRequestContext, userMessage: String): String {
+        val factsText = facts.joinToString(" ")
+        
+        // History: last 2 turns, each clamped to 15 tokens for even more stability
+        val historyPart = if (context.recentMessages.isNotEmpty()) {
+            val last2 = context.recentMessages.takeLast(2).map { 
+                val words = it.split(Regex("\\s+")).filter { w -> w.isNotBlank() }
+                if (words.size > 15) words.takeLast(15).joinToString(" ") else it
             }
+            "Past: " + last2.joinToString("; ")
+        } else ""
+
+        val userWords = userMessage.split(Regex("\\s+")).filter { it.isNotBlank() }
+        val userMessageClamped = if (userWords.size > 20) {
+            userWords.take(20).joinToString(" ")
+        } else userMessage
+
+        val promptBuilder = StringBuilder()
+        // Stronger, more restrictive system instruction
+        promptBuilder.append("<|im_start|>system\nRewrite the following facts as one short, friendly sentence in English. Do not add advice or opinions.<|im_end|>\n")
+        promptBuilder.append("<|im_start|>user\n")
+        promptBuilder.append("FACTS: ").append(factsText)
+        if (historyPart.isNotEmpty()) {
+            promptBuilder.append("\n").append(historyPart)
+        }
+        promptBuilder.append("\nQUESTION: \"").append(userMessageClamped).append("\"<|im_end|>\n")
+        promptBuilder.append("<|im_start|>assistant\n")
+        
+        var prompt = promptBuilder.toString()
+        
+        // Task 5: Budget enforcement ≤ 200 tokens
+        if (estimateTokens(prompt) > MAX_PROMPT_TOKENS) {
+            // Drop history first
+            promptBuilder.setLength(0)
+            promptBuilder.append("<|im_start|>system\nReword these facts warmly in one short sentence. Add no new information.<|im_end|>\n")
+            promptBuilder.append("<|im_start|>user\n")
+            promptBuilder.append(factsText)
+            promptBuilder.append("\n\nThey asked: \"").append(userMessageClamped).append("\"<|im_end|>\n")
+            promptBuilder.append("<|im_start|>assistant\n")
+            prompt = promptBuilder.toString()
+            
+            if (estimateTokens(prompt) > MAX_PROMPT_TOKENS) {
+                // Still over? Truncate user message further
+                promptBuilder.setLength(0)
+                promptBuilder.append("<|im_start|>system\nReword these facts warmly in one short sentence. Add no new information.<|im_end|>\n")
+                promptBuilder.append("<|im_start|>user\n")
+                promptBuilder.append(factsText)
+                promptBuilder.append("\n\nThey asked: \"").append(userMessage.take(30)).append("\"<|im_end|>\n")
+                promptBuilder.append("<|im_start|>assistant\n")
+                prompt = promptBuilder.toString()
+            }
+        }
+        
+        return prompt
+    }
+
+    private fun validateAndCleanOutput(raw: String, facts: List<String>): String {
+        var output = raw.split("<|im_end|>")[0].split("<|im_start|>")[0].trim()
+        if (output.startsWith("assistant:", ignoreCase = true)) {
+            output = output.substringAfter(":").trim()
+        }
+
+        val factsText = facts.joinToString(" ")
+
+        // Task 6.2: Reject conditions
+        if (output.isBlank() || output.length < 5 || output.length > 300) {
+            return factsText
+        }
+
+        // Catch list-style hallucinations and generic self-help patterns
+        val forbiddenPatterns = listOf(
+            "im_start", "im_end", "Reword these facts", "1.", "2.", "3.", 
+            "mental health", "freelance", "planner", "visualization", "self-compassion"
+        )
+        if (forbiddenPatterns.any { output.lowercase().contains(it) }) {
+            Log.w(TAG, "Rejected hallucinated content: $output")
+            return factsText
+        }
+
+        // Shares no significant word with supplied facts
+        val factWords = factsText.lowercase()
+            .split(Regex("[^a-z]"))
+            .filter { it.length > 3 && !STOPWORDS.contains(it) }
+            .toSet()
+        
+        val outputWords = output.lowercase()
+            .split(Regex("[^a-z]"))
+            .filter { it.length > 3 && !STOPWORDS.contains(it) }
+        
+        if (factWords.isNotEmpty() && outputWords.none { factWords.contains(it) }) {
+            return factsText
+        }
+
+        return output
+    }
+
+    private fun estimateTokens(text: String): Double {
+        return text.split(Regex("\\s+")).filter { it.isNotBlank() }.size * 1.3
+    }
+
+    private fun createReply(text: String, intent: String, startTime: Long, prompt: String, promptVersion: String): ChatReply {
+        return ChatReply(
+            text = text,
+            intent = intent,
+            provenance = Provenance(
+                calculationVersion = "astrocalc-1.0",
+                promptVersion = promptVersion,
+                model = "SmolLM2-135M-Instruct",
+                generatedAt = Instant.now().toString(),
+                source = "LocalAiProvider",
+                sourceVersion = "mediapipe-llm-1.0",
+                inputHash = HashUtil.sha256(prompt),
+                outputHash = HashUtil.sha256(text)
+            )
+        )
+    }
+
+    private fun logChatResult(conversationId: Long?, responseId: String, previousId: String?, promptVersion: String, input: String, output: String?, success: Boolean, error: String?, startTime: Long) {
+        logDao?.let { dao ->
+            val log = AIRequestLogEntity(
+                conversationId = conversationId, interactionId = responseId,
+                previousInteractionId = previousId, requestType = promptVersion,
+                timestamp = Instant.now().toString(), model = "SmolLM2-135M-Instruct",
+                promptVersion = promptVersion, inputHash = HashUtil.sha256(input),
+                outputHash = output?.let { HashUtil.sha256(it) }, success = success, error = error,
+                latencyMs = System.currentTimeMillis() - startTime
+            )
+            GlobalScope.launch(Dispatchers.IO) { dao.insert(log) }
         }
     }
 
