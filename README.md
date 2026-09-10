@@ -7,34 +7,6 @@ home screen; Kundali, Panchang, and Settings are one tap away.
 
 ---
 
-## ⚠️ Before you open this in Android Studio
-
-This project was generated in a sandboxed environment **without Android SDK
-or internet access**, so it has never been compiled or run. It has been
-written carefully and cross-checked (package names, imports, method
-signatures, entity/DAO wiring, and enum serialization all verified by
-static inspection), but Android Studio's own Gradle sync is the first real
-compiler pass it will go through. Budget a little time for the normal
-first-open friction of any generated project — a missing semicolon or an
-AGP/Kotlin version mismatch is far more likely than a structural problem.
-
-**Gradle wrapper jar:** `gradle/wrapper/gradle-wrapper.jar` (a binary file)
-is *not* included — it can't be produced without network access. When you
-open the project, Android Studio will either regenerate it automatically or
-prompt you to. If not, run this once you have a JDK on your PATH:
-```
-gradle wrapper --gradle-version 8.11.1
-```
-
-**compileSdk 37 / AGP:** the build file uses the exact `compileSdk { version
-= release(37) { minorApiLevel = 1 } }` block you specified, which needs a
-recent AGP (8.9+) and Android Studio (Ladybug/Meerkat or newer) with SDK 37
-installed via the SDK Manager. If your installed Android Studio is older,
-either update it or simplify that block to `compileSdk = 37` and drop the
-`minorApiLevel` if sync complains.
-
----
-
 ## What actually works right now
 
 - **Chat home screen** — local, paginated conversation history (Room),
