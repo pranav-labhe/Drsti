@@ -774,17 +774,19 @@ private fun renderInlineMarkdown(text: String): androidx.compose.ui.text.Annotat
             append(text.substring(lastIndex, match.range.first))
             val matchText = match.value
             when {
-                matchText.startsWith("**") -> {
+                // Safety guard: Ensure bold marker has at least 4 chars (**x**)
+                matchText.startsWith("**") && matchText.length >= 4 -> {
                     withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
                         append(matchText.substring(2, matchText.length - 2))
                     }
                 }
-                matchText.startsWith("*") -> {
+                // Safety guard: Ensure italic/code markers have at least 2 chars (*x*)
+                matchText.startsWith("*") && matchText.length >= 2 -> {
                     withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
                         append(matchText.substring(1, matchText.length - 1))
                     }
                 }
-                matchText.startsWith("`") -> {
+                matchText.startsWith("`") && matchText.length >= 2 -> {
                     withStyle(SpanStyle(
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                         background = Color.Black.copy(alpha = 0.08f)
@@ -792,6 +794,7 @@ private fun renderInlineMarkdown(text: String): androidx.compose.ui.text.Annotat
                         append(matchText.substring(1, matchText.length - 1))
                     }
                 }
+                else -> append(matchText)
             }
             lastIndex = match.range.last + 1
         }

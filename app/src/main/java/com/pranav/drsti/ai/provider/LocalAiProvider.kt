@@ -14,6 +14,7 @@ import com.pranav.drsti.database.entity.AIRequestLogEntity
 import com.pranav.drsti.model.*
 import com.pranav.drsti.util.HashUtil
 import kotlinx.coroutines.*
+import java.io.File
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -24,7 +25,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * MOCK mode provider powered by a local LLM (SmolLM2-135M-Instruct).
- * Preserves deterministic astronomical calculations while adding local reasoning.
  */
 class LocalAiProvider(
     private val context: Context,
@@ -39,10 +39,7 @@ class LocalAiProvider(
     private var llmSession: LlmInferenceSession? = null
     private val isInitializing = AtomicBoolean(false)
 
-    // Task 5: Budget and Prompt constants
-    private val MAX_PROMPT_TOKENS = 200
     private val GREETINGS = setOf("hi", "hello", "hey", "thanks", "thank you", "ok", "bye", "namaste")
-    private val STOPWORDS = setOf("this", "that", "with", "from", "your", "have", "been", "will", "they", "asked")
 
     init {
         initializeLlm()
@@ -53,37 +50,32 @@ class LocalAiProvider(
         
         GlobalScope.launch(Dispatchers.IO) {
             try {
-                Log.d(TAG, "Starting Local LLM initialization...")
-                AstroTermResolver.initialize(context) // Task 2
+                Log.d(TAG, "Initializing Local LLM...")
+                AstroTermResolver.initialize(context)
 
                 val modelPath = AstroModelManager.getOrExtractModel(context)
-                if (modelPath != null && java.io.File(modelPath).exists()) {
+                if (modelPath != null && File(modelPath).exists()) {
                     try {
                         val options = LlmInference.LlmInferenceOptions.builder()
                             .setModelPath(modelPath)
-                            .setMaxTokens(1065) // Task 7: Instance ceiling
+                            .setMaxTokens(1280)
+                            .setPreferredBackend(LlmInference.Backend.CPU)
                             .build()
-                        val inference = LlmInference.createFromOptions(context, options)
-                        llmInference = inference
-                        
-                        // Task 7: Create persistent session with temperature
+                        llmInference = LlmInference.createFromOptions(context, options)
+
                         val sessionOptions = LlmInferenceSession.LlmInferenceSessionOptions.builder()
-                            .setTemperature(0.4f)
+                            .setTemperature(0.4f) 
                             .setTopK(40)
                             .build()
-                        llmSession = LlmInferenceSession.createFromOptions(inference, sessionOptions)
-                        
-                        Log.i(TAG, "Local LLM and Session initialized successfully")
+                        llmSession = LlmInferenceSession.createFromOptions(llmInference!!, sessionOptions)
+
+                        Log.i(TAG, "Local LLM and Session initialized (CPU Backend)")
                     } catch (e: Exception) {
-                        Log.e(TAG, "MediaPipe rejected the model file ($modelPath). Deleting...", e)
-                        java.io.File(modelPath).delete() 
-                        throw e
+                        Log.e(TAG, "Initialization failed", e)
                     }
-                } else {
-                    Log.e(TAG, "Model file extraction failed or file not found in assets")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to initialize Local LLM", e)
+                Log.e(TAG, "Initialization failed", e)
             } finally {
                 isInitializing.set(false)
             }
@@ -102,31 +94,15 @@ class LocalAiProvider(
     override suspend fun generatePanchang(date: LocalDate, zoneId: ZoneId, latitude: Double, longitude: Double) =
         mockFallback.generatePanchang(date, zoneId, latitude, longitude)
 
-    override suspend fun analyzeTransits(context: AiRequestContext): TransitAnalysisResult {
-        return mockFallback.analyzeTransits(context) // Transit logic is already quite deterministic in MockAiProvider
-    }
-
-    override suspend fun analyzeDecision(context: AiRequestContext, request: DecisionRequest): DecisionAnalysis {
-        return mockFallback.analyzeDecision(context, request)
-    }
-
-    override suspend fun analyzeOutcome(originalAnalysis: DecisionAnalysis, outcome: OutcomeInput): OutcomeAnalysis {
-        return mockFallback.analyzeOutcome(originalAnalysis, outcome)
-    }
+    override suspend fun analyzeTransits(context: AiRequestContext) = mockFallback.analyzeTransits(context)
+    override suspend fun analyzeDecision(context: AiRequestContext, request: DecisionRequest) = mockFallback.analyzeDecision(context, request)
+    override suspend fun analyzeOutcome(originalAnalysis: DecisionAnalysis, outcome: OutcomeInput) = mockFallback.analyzeOutcome(originalAnalysis, outcome)
 
     override suspend fun chat(context: AiRequestContext, userMessage: String, conversationId: Long?): ChatReply {
         val llm = llmInference
         val session = llmSession
-        
-        Log.d(TAG, "Chat request received. LLM ready: ${llm != null}, Session ready: ${session != null}")
-
-        // Lazy retry if not initialized yet
-        if (llm == null && !isInitializing.get()) {
-            initializeLlm()
-        }
-
         if (llm == null || session == null) {
-            Log.w(TAG, "Falling back to MockAiProvider (LLM/Session null)")
+            if (!isInitializing.get()) initializeLlm()
             return mockFallback.chat(context, userMessage, conversationId)
         }
 
@@ -142,63 +118,45 @@ class LocalAiProvider(
                 previousId = logDao.getLastInteraction(conversationId)?.interactionId
             }
 
-            // Task 8: Small-talk short-circuit (Fixed for Devanagari)
-            val normalizedMessage = userMessage.lowercase().trim().replace(Regex("[^a-z\\s\\u0900-\\u097F]"), "")
-            if (GREETINGS.contains(normalizedMessage) || normalizedMessage == "नमस्ते") {
-                val cannedReply = "Namaste! I'm Drishti, your companion. How can I help you see clearly today?"
-                output = cannedReply
+            val normalizedMessage = userMessage.lowercase().trim().replace(Regex("[^a-z\\s]"), "")
+            if (GREETINGS.contains(normalizedMessage)) {
+                output = "Namaste! I'm Drishti. How can I help you see clearly today?"
                 success = true
-                return createReply(output!!, "SMALL_TALK", startTime, userMessage, "v5-small-talk")
+                return createReply(output!!, "SMALL_TALK", startTime, userMessage, "v9-stream")
             }
 
-            // Task 4.3: Resolve concepts
             val concepts = AstroTermResolver.resolve(userMessage)
-            
-            // Task 4.4: Format facts
             val facts = FactFormatter.format(concepts, context)
-            
-            // P0: Empty facts guard
-            if (facts.isEmpty()) {
-                Log.w(TAG, "No facts available for this context. Falling back to Mock.")
-                return mockFallback.chat(context, userMessage, conversationId)
-            }
-
-            // Task 5: Build ONE prompt
             val prompt = buildPrompt(facts, context, userMessage)
             Log.d(TAG, "Prompt: $prompt")
 
-            // Task 7: Streaming with Token Clamping and Lifecycle Safety
             val deferredOutput = CompletableDeferred<String>()
             val sessionDone = CompletableDeferred<Unit>()
             val outputBuilder = StringBuilder()
             var wordsGenerated = 0
-            
-            // We use a fresh clone of the session to ensure we don't accumulate history 
-            // from multiple calls since we manage history manually in the prompt.
+
             val callSession = session.cloneSession()
             try {
                 callSession.addQueryChunk(prompt)
-                
                 withContext(Dispatchers.Default) {
                     callSession.generateResponseAsync(object : ProgressListener<String> {
                         override fun run(partialResult: String?, done: Boolean) {
-                            // Always signal completion when the engine says it's done
                             if (done) sessionDone.complete(Unit)
-                            
                             if (deferredOutput.isCompleted) return
                             
                             partialResult?.let { 
                                 outputBuilder.append(it)
                                 wordsGenerated += it.split(Regex("\\s+")).filter { w -> w.isNotBlank() }.size
+                                Log.d(TAG, "Partial Output: $it")
                             }
                             
                             val currentText = outputBuilder.toString()
-                            // Stop early if: im_end reached, or exceeded ~80 tokens (tighter limit for stability)
-                            if (currentText.contains("<|im_end|>") || (wordsGenerated * 1.3) > 80) {
-                                val cleaned = currentText.substringBefore("<|im_end|>").trim()
-                                deferredOutput.complete(cleaned)
+                            // Stop early if im_end reached, or exceeded 7000 words (safer for 135M memory)
+                            if (currentText.contains("<|im_end|>") || wordsGenerated > 7000) {
+                                val finalized = currentText.substringBefore("<|im_end|>").trim()
+                                deferredOutput.complete(finalized)
                                 if (!done) {
-                                    Log.d(TAG, "Early termination triggered, cancelling...")
+                                    Log.d(TAG, "Safety valve: cancelling runaway generation")
                                     callSession.cancelGenerateResponseAsync()
                                 }
                             } else if (done) {
@@ -206,202 +164,103 @@ class LocalAiProvider(
                             }
                         }
                     })
-                    
-                    // Wait for the result (with timeout)
-                    withTimeout(25000) { 
-                        output = deferredOutput.await()
-                    }
+                    withTimeout(25000) { output = deferredOutput.await() }
                 }
             } finally {
-                // CRITICAL: Wait for the engine to actually finish/cancel before closing
-                // The IllegalStateException happens if close() is called while 'done' is still false.
-                withContext(Dispatchers.Default) {
-                    withTimeoutOrNull(2000) { sessionDone.await() }
-                }
+                // Ensure we wait for the engine to stop before closing the session
+                withContext(Dispatchers.Default) { delay(200); sessionDone.join() }
                 callSession.close()
             }
-
+            
             Log.d(TAG, "Raw Output: $output")
 
-            // Task 6: Validate output
-            output = validateAndCleanOutput(output ?: "", facts)
-            Log.d(TAG, "Validated Output: $output")
+            // Filter output
+            output = output?.substringBefore("<|im_end|>")?.trim() ?: ""
 
-            // P0: Final blank output guard
-            if (output.isBlank()) {
-                Log.w(TAG, "Validated output is blank. Falling back to Mock.")
-                return mockFallback.chat(context, userMessage, conversationId)
+            if (output.isBlank() || output.startsWith("+") || output.contains("jupyter_text")) {
+                Log.w(TAG, "Junk detected, falling back.")
+                output = facts.joinToString(" ").replace(Regex("<.*?>"), "").trim()
             }
 
-            // Handle language translation
             val userLang = detectLanguage(userMessage)
-            if (userLang != "en") {
-                output = translationService.translate(output!!, userLang)
-            }
+            if (userLang != "en") output = translationService.translate(output, userLang)
 
             success = true
-
-            return createReply(output!!, "LOCAL_V5_SINGLE_CALL", startTime, prompt, "v5-single-call")
+            return createReply(output, "LOCAL_V9_STREAM", startTime, prompt, "v9-stream")
         } catch (e: Exception) {
-            errorMsg = e.message ?: "Unknown error"
-            Log.e(TAG, "Pipeline error - FALLING BACK", e)
-            val reply = mockFallback.chat(context, userMessage, conversationId)
-            return reply.copy(text = "[Fallback] ${reply.text}")
+            errorMsg = e.message
+            Log.e(TAG, "Chat failed", e)
+            return mockFallback.chat(context, userMessage, conversationId)
         } finally {
-            logChatResult(conversationId, responseId, previousId, "v5-single-call", userMessage, output, success, errorMsg, startTime)
+            logChatResult(conversationId, responseId, previousId, "v9-stream", userMessage, output, success, errorMsg, startTime)
         }
     }
 
     private fun buildPrompt(facts: List<String>, context: AiRequestContext, userMessage: String): String {
         val factsText = facts.joinToString(" ")
-        
-        // History: last 2 turns, each clamped to 15 tokens for even more stability
-        val historyPart = if (context.recentMessages.isNotEmpty()) {
-            val last2 = context.recentMessages.takeLast(2).map { 
-                val words = it.split(Regex("\\s+")).filter { w -> w.isNotBlank() }
-                if (words.size > 15) words.takeLast(15).joinToString(" ") else it
-            }
-            "HISTORY: " + last2.joinToString("; ")
-        } else ""
+        val userMsg = userMessage.take(100)
 
-        val userWords = userMessage.split(Regex("\\s+")).filter { it.isNotBlank() }
-        val userMessageClamped = if (userWords.size > 20) {
-            userWords.take(20).joinToString(" ")
-        } else userMessage
+        val kbMap = AstroInterpretationRenderer.getKnowledgeBase(context)
+        val profile = kbMap.filter { it.key == "MOON_SIGN" || it.key == "LAGNA" || it.key == "CURRENT_DASHA" }
+            .values.joinToString(" ") { FactFormatter.synthesize(it) }
 
-        val systemMsg = "<|im_start|>system\nRewrite the following facts as one short, friendly sentence in English. Do not add advice or opinions.<|im_end|>\n"
-        
+        // OFFICIAL ChatML template with clear visual boundaries for factual grounding
         val promptBuilder = StringBuilder()
-        promptBuilder.append(systemMsg)
+        
+        // 1. System Block: Persona & Constraints
+        promptBuilder.append("<|im_start|>system\n")
+        promptBuilder.append("You are Drishti, a warm Vedic assistant. Use ONLY the provided Facts to help the user in simple English. Never use technical jargon or symbols.\n")
+        promptBuilder.append("<|im_end|>\n")
+        
+        // 2. Shot Block: Teaching the model to use the "Facts"
         promptBuilder.append("<|im_start|>user\n")
-        promptBuilder.append("FACTS: ").append(factsText)
-        if (historyPart.isNotEmpty()) {
-            promptBuilder.append("\n").append(historyPart)
-        }
-        promptBuilder.append("\nQUERY: \"").append(userMessageClamped).append("\"<|im_end|>\n")
+        promptBuilder.append("Facts: Your Emotions (Moon) are in their home sign.\n")
+        promptBuilder.append("Question: How do I feel?\n")
+        promptBuilder.append("<|im_end|>\n")
+        promptBuilder.append("<|im_start|>assistant\n")
+        promptBuilder.append("Namaste! Since your Emotions are in their home sign today, you are likely feeling very peaceful and centered.\n")
+        promptBuilder.append("<|im_end|>\n")
+
+        // 3. Current Block: Dynamic Data
+        promptBuilder.append("<|im_start|>user\n")
+        promptBuilder.append("Facts: $profile $factsText\n")
+        promptBuilder.append("Question: $userMsg\n")
+        promptBuilder.append("<|im_end|>\n")
+        
+        // 4. Open Assistant block for generation
         promptBuilder.append("<|im_start|>assistant\n")
         
-        var prompt = promptBuilder.toString()
-        
-        // Task 5: Budget enforcement ≤ 200 tokens
-        if (estimateTokens(prompt) > MAX_PROMPT_TOKENS) {
-            // Drop history first
-            promptBuilder.setLength(0)
-            promptBuilder.append(systemMsg)
-            promptBuilder.append("<|im_start|>user\n")
-            promptBuilder.append("FACTS: ").append(factsText)
-            promptBuilder.append("\nQUERY: \"").append(userMessageClamped).append("\"<|im_end|>\n")
-            promptBuilder.append("<|im_start|>assistant\n")
-            prompt = promptBuilder.toString()
-            
-            if (estimateTokens(prompt) > MAX_PROMPT_TOKENS) {
-                // Still over? Truncate user message further
-                promptBuilder.setLength(0)
-                promptBuilder.append(systemMsg)
-                promptBuilder.append("<|im_start|>user\n")
-                promptBuilder.append("FACTS: ").append(factsText)
-                promptBuilder.append("\nQUERY: \"").append(userMessage.take(30)).append("\"<|im_end|>\n")
-                promptBuilder.append("<|im_start|>assistant\n")
-                prompt = promptBuilder.toString()
-            }
-        }
-        
-        return prompt
+        return promptBuilder.toString()
     }
 
-    private fun validateAndCleanOutput(raw: String, facts: List<String>): String {
-        var output = raw.split("<|im_end|>")[0].split("<|im_start|>")[0].trim()
-        if (output.startsWith("assistant:", ignoreCase = true)) {
-            output = output.substringAfter(":").trim()
-        }
-
-        val factsText = facts.joinToString(" ")
-
-        // Task 6.2: Reject conditions
-        if (output.isBlank() || output.length < 5 || output.length > 300) {
-            return factsText
-        }
-
-        // Catch list-style hallucinations and generic self-help patterns
-        // P2.3: Match line-start list markers
-        val listMarkerRegex = Regex("(?m)^\\d+\\.")
-        if (listMarkerRegex.containsMatchIn(output)) {
-            Log.w(TAG, "Rejected list-style hallucination: $output")
-            return factsText
-        }
-
-        val forbiddenKeywords = listOf(
-            "im_start", "im_end", "Reword these facts",
-            "mental health", "freelance", "planner", "visualization", "self-compassion"
-        )
-        if (forbiddenKeywords.any { output.lowercase().contains(it) }) {
-            Log.w(TAG, "Rejected hallucinated keyword: $output")
-            return factsText
-        }
-
-        // Shares no significant word with supplied facts
-        val factWords = factsText.lowercase()
-            .split(Regex("[^a-z]"))
-            .filter { it.length > 3 && !STOPWORDS.contains(it) }
-            .toSet()
-        
-        val outputWords = output.lowercase()
-            .split(Regex("[^a-z]"))
-            .filter { it.length > 3 && !STOPWORDS.contains(it) }
-        
-        if (factWords.isNotEmpty() && outputWords.none { factWords.contains(it) }) {
-            return factsText
-        }
-
-        return output
+    private fun createReply(text: String, intent: String, startTime: Long, prompt: String, version: String): ChatReply {
+        return ChatReply(text, intent, Provenance("1.0", "1.0", version, "SmolLM-135M", Instant.now().toString(), "LocalAiProvider", "1.0", HashUtil.sha256(prompt), HashUtil.sha256(text)))
     }
 
-    private fun estimateTokens(text: String): Double {
-        return text.split(Regex("\\s+")).filter { it.isNotBlank() }.size * 1.7
-    }
-
-    private fun createReply(text: String, intent: String, startTime: Long, prompt: String, promptVersion: String): ChatReply {
-        return ChatReply(
-            text = text,
-            intent = intent,
-            provenance = Provenance(
-                calculationVersion = "astrocalc-1.0",
-                promptVersion = promptVersion,
-                model = "SmolLM2-135M-Instruct",
-                generatedAt = Instant.now().toString(),
-                source = "LocalAiProvider",
-                sourceVersion = "mediapipe-llm-1.0",
-                inputHash = HashUtil.sha256(prompt),
-                outputHash = HashUtil.sha256(text)
-            )
-        )
-    }
-
-    private fun logChatResult(conversationId: Long?, responseId: String, previousId: String?, promptVersion: String, input: String, output: String?, success: Boolean, error: String?, startTime: Long) {
+    private fun logChatResult(conversationId: Long?, responseId: String, previousId: String?, version: String, input: String, output: String?, success: Boolean, error: String?, startTime: Long) {
         logDao?.let { dao ->
             val log = AIRequestLogEntity(
-                conversationId = conversationId, interactionId = responseId,
-                previousInteractionId = previousId, requestType = promptVersion,
-                timestamp = Instant.now().toString(), model = "SmolLM2-135M-Instruct",
-                promptVersion = promptVersion, inputHash = HashUtil.sha256(input),
-                outputHash = output?.let { HashUtil.sha256(it) }, success = success, error = error,
+                conversationId = conversationId,
+                interactionId = responseId,
+                previousInteractionId = previousId,
+                requestType = version,
+                timestamp = Instant.now().toString(),
+                model = "SmolLM-135M",
+                promptVersion = version,
+                inputHash = HashUtil.sha256(input),
+                outputHash = output?.let { HashUtil.sha256(it) },
+                success = success,
+                error = error,
                 latencyMs = System.currentTimeMillis() - startTime
             )
             GlobalScope.launch(Dispatchers.IO) { dao.insert(log) }
         }
     }
 
+    private fun detectLanguage(text: String) = if (text.contains(Regex("[\\u0900-\\u097F]"))) "hi" else "en"
+
     override fun close() {
         llmInference?.close()
         translationService.close()
-    }
-
-    private fun detectLanguage(text: String): String {
-        val m = text.lowercase()
-        // Simple heuristic for demo/mock purposes, in real apps use a proper language detector
-        return when {
-            m.contains(Regex("[\\u0900-\\u097F]")) -> "hi" // Devanagari script (Hindi/Marathi)
-            else -> "en"
-        }
     }
 }

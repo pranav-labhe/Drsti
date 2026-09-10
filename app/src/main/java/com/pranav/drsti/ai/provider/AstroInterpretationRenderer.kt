@@ -99,21 +99,10 @@ object AstroInterpretationRenderer {
         if (t.contains("TODAY") || t.contains("PANCHANG") || t.contains("VIBE")) {
             context.panchang?.let { p ->
                 sb.append("Today's Environment: ${p.tithiName} Tithi, which is generally ${if(p.paksha.contains("Shukla")) "growing and supportive" else "internal and reflective"}. ")
-            }
+            } ?: sb.append("Today's Environment: The cosmic energy is currently transitioning. ")
         }
-        if(sb.toString().isBlank()){
-            dasha?.let { d ->
-                sb.append("Current Cosmic Cycle: You are in ${d.currentMahadasha?.planet?.name} Mahadasha. This is a period of ${getPlanetTheme(d.currentMahadasha?.planet)}. ")
-            }
-            context.panchang?.let { p ->
-                sb.append("Today's Environment: ${p.tithiName} Tithi, which is generally ${if(p.paksha.contains("Shukla")) "growing and supportive" else "internal and reflective"}. ")
-            }
-            kundali?.let { k ->
-                val moonSign = k.planets.find { it.planet == PlanetName.MOON }?.sign?.displayName ?: "Unknown"
-                sb.append("Vedic Identity: Your Rashi (Moon Sign) is $moonSign. Your Lagna is ${k.ascendant.sign.displayName}. ")
-            }
-        }
-        return sb.toString().ifBlank { "I am Drishti, your companion. I'm here to listen and help you see the deeper signals in your life." }
+        
+        return sb.toString().trim()
     }
 
     private fun getPlanetTheme(planet: PlanetName?) = when (planet) {

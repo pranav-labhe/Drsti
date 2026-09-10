@@ -5,54 +5,68 @@ import com.pranav.drsti.model.*
 
 object FactFormatter {
     private val translationMap = mapOf(
-        "SUN" to "Sun", "MOON" to "Moon", "MARS" to "Mars", "MERCURY" to "Mercury",
-        "JUPITER" to "Jupiter", "VENUS" to "Venus", "SATURN" to "Saturn", "RAHU" to "Rahu", "KETU" to "Ketu",
-        "Mahadasha" to "major period",
-        "Antardasha" to "sub-period",
+        "Mahadasha" to "Major Period",
+        "Antardasha" to "Sub-period",
         "Rashi" to "Moon sign",
         "Lagna" to "Ascendant",
         "Tithi" to "lunar day",
-        "Nakshatra" to "star constellation",
-        "Vedic Identity" to "Astrological Identity",
-        "Current Cosmic Cycle" to "Current Cycle"
+        "Nakshatra" to "star constellation"
     )
+
+    private val semanticMap = mapOf(
+        "Sun" to "Soul Purpose",
+        "Moon" to "Emotions",
+        "Mars" to "Ambition",
+        "Mercury" to "Communication",
+        "Jupiter" to "Wisdom",
+        "Venus" to "Creativity",
+        "Saturn" to "Structure",
+        "Rahu" to "Desires",
+        "Ketu" to "Spirituality",
+        "Major Period" to "Major Life Chapter",
+        "Sub-period" to "Secondary Timing",
+        "10th House" to "Career",
+        "7th House" to "Relationships",
+        "1st House" to "Self",
+        "4th House" to "Home",
+        "Ascendant" to "Public Persona",
+        "Moon sign" to "Inner Nature",
+        "Pratipada" to "the first day of the lunar cycle",
+        "Shukla Paksha" to "the waxing moon phase of growth",
+        "Krishna Paksha" to "the waning moon phase of reflection",
+        "Purva Phalguni" to "the star of creativity and rest",
+        "Indra Yoga" to "the alignment for leadership and power"
+    )
+
+    /** 
+     * Synthesizes technical terms using the <XYZ / Meaning> format.
+     */
+    fun synthesize(text: String): String {
+        var result = text
+        // 1. First cleanup Sanskrit
+        translationMap.keys.forEach { sanskrit ->
+            result = result.replace(Regex("(?i)\\b$sanskrit\\b"), "")
+        }
+        
+        // 2. Wrap with < > as requested
+        semanticMap.forEach { (term, meaning) ->
+            val pattern = Regex("(?i)\\b$term\\b")
+            if (pattern.containsMatchIn(result)) {
+                result = result.replace(pattern, "<XYZ: $term / Meaning: $meaning>")
+            }
+        }
+        return result.replace(Regex("\\s+"), " ").trim()
+    }
 
     fun format(concepts: Set<String>, context: AiRequestContext): List<String> {
         val facts = mutableListOf<String>()
-
-        // 1. Conditional facts (Priority)
-        val conditional = mutableListOf<String>()
         for (concept in concepts) {
             val raw = AstroInterpretationRenderer.renderFactsFromTags(concept, context)
-            conditional.addAll(splitToSentences(raw))
+            facts.addAll(splitToSentences(raw))
         }
         
-        val conditionalTranslated = conditional.map { translate(it) }.distinct()
-        val limitedConditional = enforceBudget(conditionalTranslated, 65) // Priority given to user query
-        facts.addAll(limitedConditional)
-
-        // 2. Baseline facts (Fallback/Supplementary)
-        // Use renderer for baseline too to ensure deduplication
-        val baselineRaw = AstroInterpretationRenderer.renderFactsFromTags("IDENTITY,TIMING,VIBE", context)
-        val baseline = splitToSentences(baselineRaw).map { translate(it) }.distinct()
-        
-        // Deduplicate against already added facts
-        val uniqueBaseline = baseline.filter { b -> 
-            facts.none { existing -> existing.equals(b, true) } 
-        }
-        
-        val limitedBaseline = enforceBudget(uniqueBaseline, 35) // Total budget is ~100 tokens (105 for safety)
-        facts.addAll(limitedBaseline)
-
-        return facts
-    }
-
-    private fun translate(text: String): String {
-        var result = text
-        translationMap.forEach { (sanskrit, english) ->
-            result = result.replace(Regex("(?i)\\b$sanskrit\\b"), english)
-        }
-        return result
+        val plainFacts = facts.map { synthesize(it) }.distinct()
+        return enforceBudget(plainFacts, 120)
     }
 
     private fun splitToSentences(text: String): List<String> {
@@ -65,18 +79,12 @@ object FactFormatter {
         val result = mutableListOf<String>()
         var currentTokens = 0.0
         for (s in sentences) {
-            val tokens = estimateTokens(s)
-            // Each fact sentence: ≤15 tokens
-            if (tokens <= 15.0 && currentTokens + tokens <= maxTokens) {
+            val tokens = s.split(" ").size * 1.5
+            if (currentTokens + tokens <= maxTokens) {
                 result.add("$s.")
                 currentTokens += tokens
             }
         }
         return result
-    }
-
-    private fun estimateTokens(text: String): Double {
-        val words = text.split(Regex("\\s+")).filter { it.isNotBlank() }.size
-        return words * 1.7 // Safety ratio P2.2
     }
 }
