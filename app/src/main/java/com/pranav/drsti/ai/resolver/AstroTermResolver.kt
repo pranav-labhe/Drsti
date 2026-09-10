@@ -122,7 +122,8 @@ object AstroTermResolver {
             for ((concept, terms) in allTerms) {
                 for (term in terms) {
                     val normalizedTerm = term.lowercase()
-                    if (normalizedTerm.length >= 5 && levenshteinDistance(token, normalizedTerm) <= 1) {
+                    // Restrict fuzzy pass to single tokens against single-word glossary terms only
+                    if (normalizedTerm.length >= 5 && !normalizedTerm.contains(" ") && levenshteinDistance(token, normalizedTerm) <= 1) {
                         results.add(concept)
                         break
                     }

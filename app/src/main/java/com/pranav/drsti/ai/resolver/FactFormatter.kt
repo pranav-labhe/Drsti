@@ -20,48 +20,29 @@ object FactFormatter {
     fun format(concepts: Set<String>, context: AiRequestContext): List<String> {
         val facts = mutableListOf<String>()
 
-        // 1. Baseline facts
-        val baseline = mutableListOf<String>()
-        context.kundali?.let { k ->
-            val moonSign = k.planets.find { it.planet == PlanetName.MOON }?.sign?.displayName ?: "Unknown"
-            baseline.add("Your Moon sign is $moonSign.")
-            baseline.add("Your Ascendant is ${k.ascendant.sign.displayName}.")
-        }
-        context.dasha?.let { d ->
-            d.currentMahadasha?.let { m ->
-                baseline.add("You are in ${m.planet.name} major period.")
-            }
-            d.currentAntardasha?.let { a ->
-                baseline.add("You are in ${a.planet.name} sub-period.")
-            }
-        }
-        
-        val baselineTranslated = baseline.map { translate(it) }
-        val limitedBaseline = enforceBudget(baselineTranslated, 60)
-        facts.addAll(limitedBaseline)
-
-        // 2. Conditional facts
+        // 1. Conditional facts (Priority)
         val conditional = mutableListOf<String>()
-        // Prioritize detected concepts
         for (concept in concepts) {
             val raw = AstroInterpretationRenderer.renderFactsFromTags(concept, context)
             conditional.addAll(splitToSentences(raw))
         }
-
-        // Add some variety if we have space and it's relevant (e.g. VIBE if not detected)
-        if (concepts.isEmpty()) {
-            val raw = AstroInterpretationRenderer.renderFactsFromTags("VIBE", context)
-            conditional.addAll(splitToSentences(raw))
-        }
         
         val conditionalTranslated = conditional.map { translate(it) }.distinct()
-        // Deduplicate with baseline
-        val uniqueConditional = conditionalTranslated.filter { cond -> 
-            facts.none { baselineFact -> baselineFact.equals(cond, true) } 
+        val limitedConditional = enforceBudget(conditionalTranslated, 65) // Priority given to user query
+        facts.addAll(limitedConditional)
+
+        // 2. Baseline facts (Fallback/Supplementary)
+        // Use renderer for baseline too to ensure deduplication
+        val baselineRaw = AstroInterpretationRenderer.renderFactsFromTags("IDENTITY,TIMING,VIBE", context)
+        val baseline = splitToSentences(baselineRaw).map { translate(it) }.distinct()
+        
+        // Deduplicate against already added facts
+        val uniqueBaseline = baseline.filter { b -> 
+            facts.none { existing -> existing.equals(b, true) } 
         }
         
-        val limitedConditional = enforceBudget(uniqueConditional, 45)
-        facts.addAll(limitedConditional)
+        val limitedBaseline = enforceBudget(uniqueBaseline, 35) // Total budget is ~100 tokens (105 for safety)
+        facts.addAll(limitedBaseline)
 
         return facts
     }
@@ -69,7 +50,6 @@ object FactFormatter {
     private fun translate(text: String): String {
         var result = text
         translationMap.forEach { (sanskrit, english) ->
-            // Use word boundary to avoid partial matches like "SUN" in "SUNDAY" if it was there
             result = result.replace(Regex("(?i)\\b$sanskrit\\b"), english)
         }
         return result
@@ -97,6 +77,6 @@ object FactFormatter {
 
     private fun estimateTokens(text: String): Double {
         val words = text.split(Regex("\\s+")).filter { it.isNotBlank() }.size
-        return words * 1.3
+        return words * 1.7 // Safety ratio P2.2
     }
 }
